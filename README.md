@@ -1,6 +1,6 @@
-# ProcuraX — FastAPI Backend & Integration
+# ProcuraX — End-to-End Procurement Intelligence Backend
 
-ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimization platform powered by Gemma 4. This FastAPI backend coordinates document processing (PDF, CSV, XLSX), supplier claim extraction, landed-cost optimization, scenario simulations, and evidence-to-decision graph construction.
+ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimization platform powered by Gemma 4. This FastAPI backend integrates document processing, Gemma 4 claim extraction, MILP landed-cost optimization, price/capacity scenario simulation, and evidence-to-decision consistency graph construction into a unified end-to-end workflow.
 
 ---
 
@@ -17,62 +17,108 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### 3. Start Development Server
+### 3. Run FastAPI Development Server
 ```powershell
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
-Interactive OpenAPI Documentation is available at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+Interactive Swagger API Docs are available at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-### 4. Run Test Suite
+### 4. Run Complete Test Suite (19 Tests)
 ```powershell
 pytest tests/ -v
 ```
 
 ---
 
-## 📡 API Endpoints Overview
+## 📡 API Endpoints Summary
 
 | Method | Endpoint | Description | Status Codes |
 |---|---|---|---|
-| `GET` | `/api/health` | System health & version check | `200` |
-| `POST` | `/api/documents/upload` | Upload & parse supplier PDF/CSV/XLSX quotations with page citations | `200`, `400`, `500` |
-| `POST` | `/api/extract` | Extract structured supplier information & source-linked claims | `200`, `422`, `500` |
-| `POST` | `/api/optimize` | Sourcing allocation optimization under demand, MOQ, capacity & scenarios | `200`, `400`, `422`, `500` |
+| `GET` | `/api/health` | Service health & version check | `200` |
+| `POST` | `/api/documents/upload` | Upload & parse supplier PDF/CSV/XLSX quotation with page citations | `200`, `400`, `500` |
+| `POST` | `/api/extract` | Extract structured supplier quotation & claims grounded in source evidence | `200`, `422`, `500` |
+| `POST` | `/api/optimize` | Landed cost & MILP sourcing allocation optimizer with scenario simulations | `200`, `400`, `422`, `500` |
 | `POST` | `/api/graph` | Construct Evidence-to-Decision Consistency Graph (Nodes & Edges) | `200`, `400`, `422`, `500` |
+| `POST` | `/api/workflow` | **End-to-End Sourcing Workflow**: Upload -> Extract -> Validate -> Optimize -> Graph | `200`, `400`, `422`, `500` |
 
 ---
 
-## 🤝 Teammate Integration Interfaces
+## 🔄 End-to-End Demo Workflow (`POST /api/workflow`)
 
-### Person 1 — Gemma 4 Extraction (`feature/gemma-extraction`)
-Implement `BaseExtractionService` in `backend/app/services/extraction_service.py` or specify environment variable `GEMMA_API_URL`:
+Send a single request to run the complete end-to-end procurement intelligence pipeline:
 
-```python
-from backend.app.models import ExtractRequest, ExtractResponse
-
-class BaseExtractionService(Protocol):
-    def extract(self, request: ExtractRequest) -> ExtractResponse:
-        ...
+### Example Request
+```json
+{
+  "document_filename": "supplier_quotation_alpha.pdf",
+  "document_text": "Supplier: Apex Sustainable Packaging Ltd.\nSupplier ID: SUP-001\nBase Unit Price: 80.00 INR per bottle\nMinimum Order Quantity (MOQ): 100 units\nProduction Monthly Capacity: 600 units\nStandard Delivery Lead Time: 5 business days\nTransportation & Freight: 500.00 INR flat charge\nSustainability: Certified 100% Ocean Bound Recycled HDPE",
+  "target_demand": 500,
+  "budget_limit": 50000.0,
+  "scenario": {
+    "type": "price_increase",
+    "supplier_id": "SUP-001",
+    "percentage": 10.0
+  },
+  "use_mock_extraction": false
+}
 ```
 
-### Person 3 — Optimization & Graph (`feature/optimization-graph`)
-- **Optimization**: Implement `BaseOptimizationService` in `backend/app/services/optimization_service.py`:
-```python
-from backend.app.models import OptimizationRequest, OptimizationResponse
-
-class BaseOptimizationService(Protocol):
-    def optimize(self, request: OptimizationRequest) -> OptimizationResponse:
-        ...
+### Example Response Structure
+```json
+{
+  "document": {
+    "filename": "supplier_quotation_alpha.pdf",
+    "raw_text": "Supplier: Apex Sustainable Packaging Ltd...."
+  },
+  "extraction": {
+    "suppliers": [
+      {
+        "supplier_id": "SUP-001",
+        "supplier_name": "Apex Sustainable Packaging Ltd.",
+        "product_name": "Reusable Industrial Bottle (500ml)",
+        "unit_price": 80.0,
+        "currency": "INR",
+        "moq": 100,
+        "capacity": 600,
+        "claims": [...]
+      }
+    ],
+    "is_mock": true
+  },
+  "optimization": {
+    "status": "optimal",
+    "is_feasible": true,
+    "target_demand": 500,
+    "total_allocated_quantity": 500,
+    "total_landed_cost": 44500.0,
+    "allocations": [...],
+    "scenario_impact": {...}
+  },
+  "graph": {
+    "nodes": [
+      {"id": "supplier:SUP-001", "type": "supplier", "label": "Supplier: Apex Sustainable Packaging Ltd."},
+      {"id": "claim:SUP-001:unit_price:0", "type": "claim", "label": "Claim: unit_price = 80.0"},
+      {"id": "decision:recommendation", "type": "recommendation", "label": "Sourcing Recommendation"}
+    ],
+    "edges": [...]
+  },
+  "summary": "ProcuraX Sourcing Report for 'supplier_quotation_alpha.pdf':\n• Extracted claims for 1 supplier(s)...\n• Target Demand: 500 units. Status: OPTIMAL.\n• Total Landed Cost: 44,500.00 INR.\n• Evidence Graph: 8 nodes and 10 edges created linking source claims to allocation decisions."
+}
 ```
 
-- **Graph**: Implement `BaseGraphService` in `backend/app/services/graph_service.py`:
-```python
-from backend.app.models import GraphRequest, GraphResponse
+---
 
-class BaseGraphService(Protocol):
-    def build_graph(self, request: GraphRequest) -> GraphResponse:
-        ...
-```
+## 🛠️ Troubleshooting & Module Fallback Rules
+
+1. **Ollama / Gemma 4 Unavailable**:
+   - The backend detects when Ollama is offline or uninstalled and triggers a fail-safe fallback (`is_mock=True`).
+   - Responses set `metadata.fallback_triggered = True` so frontend clients can distinguish real Gemma extractions from fallback data.
+
+2. **File Parsing Errors**:
+   - Uploading corrupted PDFs or unsupported formats returns a `400 Bad Request` with exact diagnostic messages.
+
+3. **Infeasible Optimization Demands**:
+   - If target demand exceeds total supplier capacity or budget is exceeded, the optimizer returns `status: "infeasible"` with detailed explanation strings in `explanations` list.
 
 ---
 
@@ -81,15 +127,15 @@ class BaseGraphService(Protocol):
 ```json
 {
   "supplier_id": "SUP-001",
-  "supplier_name": "Apex Eco Solutions",
-  "product_name": "Reusable Bottle",
+  "supplier_name": "Apex Sustainable Packaging Ltd.",
+  "product_name": "Reusable Industrial Bottle (500ml)",
   "unit_price": 80.0,
   "currency": "INR",
   "moq": 100,
   "capacity": 600,
   "delivery_days": 5,
   "transport_cost": 500.0,
-  "sustainability_claims": ["100% Recyclable Packaging"],
+  "sustainability_claims": ["Certified 100% Ocean Bound Recycled HDPE"],
   "missing_fields": [],
   "claims": [
     {
@@ -97,7 +143,7 @@ class BaseGraphService(Protocol):
       "value": 80.0,
       "source_file": "supplier_a.pdf",
       "source_page": 1,
-      "source_excerpt": "Unit price quoted at INR 80.",
+      "source_excerpt": "Base Unit Price: 80.00 INR per bottle",
       "status": "extracted"
     }
   ]

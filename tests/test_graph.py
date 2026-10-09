@@ -44,7 +44,7 @@ def test_generate_graph_success():
     assert "supplier" in node_types
     assert "claim" in node_types
     assert "document" in node_types
-    assert "decision" in node_types
+    assert "recommendation" in node_types or "decision" in node_types
 
 
 def test_generate_graph_empty_suppliers():

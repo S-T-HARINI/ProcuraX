@@ -48,7 +48,6 @@ def test_optimize_success():
     assert data["total_allocated_quantity"] == 500
     assert data["total_landed_cost"] > 0
     assert len(data["allocations"]) > 0
-    assert data["is_mock"] is True
 
 
 def test_optimize_with_scenarios():
@@ -56,14 +55,16 @@ def test_optimize_with_scenarios():
         "suppliers": SAMPLE_SUPPLIERS,
         "target_demand": 500,
         "scenario": {
-            "price_multipliers": {"SUP-002": 1.50},  # Price hike on SUP-002 (75 -> 112.5)
-            "capacity_reductions": {"SUP-001": 0.50},  # 50% capacity reduction on SUP-001 (600 -> 300)
+            "type": "price_increase",
+            "supplier_id": "SUP-002",
+            "percentage": 50.0,
         },
     }
     response = client.post("/api/optimize", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["total_allocated_quantity"] == 500
+    assert data["scenario_impact"] is not None
 
 
 def test_optimize_budget_exceeded():
@@ -75,8 +76,9 @@ def test_optimize_budget_exceeded():
     response = client.post("/api/optimize", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["budget_exceeded"] is True
-    assert any("budget" in w.lower() for w in data["warnings"])
+    assert data["status"] == "infeasible"
+    assert len(data["explanations"]) > 0 or len(data["warnings"]) > 0
+    assert any("budget" in str(item).lower() for item in data["explanations"] + data["warnings"])
 
 
 def test_optimize_infeasible_capacity():
@@ -89,7 +91,7 @@ def test_optimize_infeasible_capacity():
     data = response.json()
     assert data["status"] == "infeasible"
     assert data["unmet_demand"] > 0
-    assert len(data["warnings"]) > 0
+    assert len(data["explanations"]) > 0 or len(data["warnings"]) > 0
 
 
 def test_optimize_invalid_request():
