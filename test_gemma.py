@@ -1,13 +1,18 @@
-from ollama import chat
+import pytest
 
-response = chat(
-    model="gemma4:e2b",
-    messages=[
-        {
-            "role": "user",
-            "content": "Explain procurement in two sentences."
-        }
-    ]
-)
+try:
+    from ollama import chat
+except ImportError:
+    pytest.skip("ollama python package not installed", allow_module_level=True)
 
-print(response.message.content)
+if __name__ == "__main__":
+    response = chat(
+        model="gemma4:e2b",
+        messages=[
+            {
+                "role": "user",
+                "content": "Explain procurement in two sentences."
+            }
+        ]
+    )
+    print(response.message.content)
