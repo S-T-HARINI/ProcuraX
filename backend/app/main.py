@@ -28,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global service instances - pluggable by Person 1 and Person 3
 extraction_service = ExtractionService()
 optimization_service = OptimizationService()
 graph_service = GraphService()
@@ -35,7 +36,7 @@ graph_service = GraphService()
 
 @app.get("/api/health", tags=["System"])
 def health_check():
-    """Health check endpoint to verify backend operational state."""
+    """Health check endpoint verifying backend operational status."""
     return {
         "status": "ok",
         "service": "ProcuraX Backend API",
@@ -52,9 +53,9 @@ def health_check():
 async def upload_document(file: UploadFile = File(...)):
     """
     Upload supplier quotation document (PDF, CSV, XLSX).
-    Parses content and preserves source page numbers / sheet details.
+    Parses document content preserving source filename and page/sheet references.
     """
-    if not file.filename:
+    if not file.filename or not file.filename.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file must have a valid filename.",
@@ -64,7 +65,7 @@ async def upload_document(file: UploadFile = File(...)):
     if len(content) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is empty.",
+            detail="Uploaded file is empty (0 bytes).",
         )
 
     try:
@@ -90,7 +91,7 @@ async def upload_document(file: UploadFile = File(...)):
 )
 def extract_claims(request: ExtractRequest):
     """
-    Extract structured supplier information and claims from parsed document text.
+    Extract structured supplier claims from quotation text.
     Uses Person 1's Gemma 4 extraction module or mock fallback.
     """
     try:

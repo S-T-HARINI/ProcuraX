@@ -1,10 +1,10 @@
 # ProcuraX — FastAPI Backend & Integration
 
-ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimization platform. This backend API connects document parsing, Gemma 4 claim extraction, landed-cost optimization, price/capacity scenario simulation, and evidence-to-decision consistency graphs.
+ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimization platform powered by Gemma 4. This FastAPI backend coordinates document processing (PDF, CSV, XLSX), supplier claim extraction, landed-cost optimization, scenario simulations, and evidence-to-decision graph construction.
 
 ---
 
-## 🚀 Quickstart (Windows PowerShell Instructions)
+## 🚀 Quickstart Instructions (Windows PowerShell)
 
 ### 1. Create and Activate Virtual Environment
 ```powershell
@@ -17,11 +17,11 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### 3. Run FastAPI Development Server
+### 3. Start Development Server
 ```powershell
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
-Open interactive Swagger API Docs at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+Interactive OpenAPI Documentation is available at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ### 4. Run Test Suite
 ```powershell
@@ -30,55 +30,48 @@ pytest tests/ -v
 
 ---
 
-## 📡 API Endpoints Summary
+## 📡 API Endpoints Overview
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Service health check |
-| `POST` | `/api/documents/upload` | Upload & parse supplier PDF/CSV/XLSX files with page references |
-| `POST` | `/api/extract` | Extract structured claims from quotation text |
-| `POST | `/api/optimize` | Optimize procurement allocation under MOQ, capacity, budget, and scenario constraints |
-| `POST` | `/api/graph` | Generate Evidence-to-Decision Consistency Graph (Nodes & Edges) |
+| Method | Endpoint | Description | Status Codes |
+|---|---|---|---|
+| `GET` | `/api/health` | System health & version check | `200` |
+| `POST` | `/api/documents/upload` | Upload & parse supplier PDF/CSV/XLSX quotations with page citations | `200`, `400`, `500` |
+| `POST` | `/api/extract` | Extract structured supplier information & source-linked claims | `200`, `422`, `500` |
+| `POST` | `/api/optimize` | Sourcing allocation optimization under demand, MOQ, capacity & scenarios | `200`, `400`, `422`, `500` |
+| `POST` | `/api/graph` | Construct Evidence-to-Decision Consistency Graph (Nodes & Edges) | `200`, `400`, `422`, `500` |
 
 ---
 
 ## 🤝 Teammate Integration Interfaces
 
 ### Person 1 — Gemma 4 Extraction (`feature/gemma-extraction`)
-Person 1 can plug their Gemma model by inheriting from `BaseExtractionService` in `backend/app/services/extraction_service.py`:
+Implement `BaseExtractionService` in `backend/app/services/extraction_service.py` or specify environment variable `GEMMA_API_URL`:
 
 ```python
-from backend.app.models import ExtractRequest, ExtractResponse, SupplierQuote
+from backend.app.models import ExtractRequest, ExtractResponse
 
-class GemmaExtractionService:
+class BaseExtractionService(Protocol):
     def extract(self, request: ExtractRequest) -> ExtractResponse:
-        # 1. Call Gemma 4 E2B inference endpoint / local model runner
-        # 2. Extract structured SupplierQuote objects preserving source file/page citations
-        # 3. Return ExtractResponse with is_mock=False
-        pass
+        ...
 ```
 
 ### Person 3 — Optimization & Graph (`feature/optimization-graph`)
-Person 3 can plug their optimization and graph modules into `backend/app/services/`:
-
 - **Optimization**: Implement `BaseOptimizationService` in `backend/app/services/optimization_service.py`:
 ```python
 from backend.app.models import OptimizationRequest, OptimizationResponse
 
-class PuLPOptimizationService:
+class BaseOptimizationService(Protocol):
     def optimize(self, request: OptimizationRequest) -> OptimizationResponse:
-        # Linear programming optimization solver (PuLP / SciPy)
-        pass
+        ...
 ```
 
 - **Graph**: Implement `BaseGraphService` in `backend/app/services/graph_service.py`:
 ```python
 from backend.app.models import GraphRequest, GraphResponse
 
-class EvidenceGraphService:
+class BaseGraphService(Protocol):
     def build_graph(self, request: GraphRequest) -> GraphResponse:
-        # Dynamic network construction connecting document -> claim -> supplier -> decision
-        pass
+        ...
 ```
 
 ---
@@ -110,4 +103,4 @@ class EvidenceGraphService:
   ]
 }
 ```
-*Rules: Unknown numeric values must be `null` (never `0`). Currencies must not be converted without explicit rates.*
+*Note: Unknown numeric values must remain `null` (`None`). Never use `0` as a default substitute for unknown data.*
