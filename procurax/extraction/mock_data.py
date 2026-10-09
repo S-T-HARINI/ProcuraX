@@ -77,7 +77,7 @@ Discounts:
 """
 
 
-def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf") -> SupplierQuotation:
+def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf", source_page: Optional[int] = 1) -> SupplierQuotation:
     """Generate deterministic synthetic quotation for Supplier Alpha (Clean/Standard)."""
     return SupplierQuotation(
         supplier_id="SUP-001",
@@ -102,7 +102,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
                 field="unit_price",
                 value=80.0,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Base Unit Price: 80.00 INR per bottle",
                 status="extracted",
                 is_verified_fact=False
@@ -111,7 +111,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
                 field="moq",
                 value=100,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Minimum Order Quantity (MOQ): 100 units",
                 status="extracted",
                 is_verified_fact=False
@@ -120,7 +120,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
                 field="capacity",
                 value=600,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Production Monthly Capacity: 600 units",
                 status="extracted",
                 is_verified_fact=False
@@ -129,7 +129,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
                 field="delivery_days",
                 value=5,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Standard Delivery Lead Time: 5 business days",
                 status="extracted",
                 is_verified_fact=False
@@ -138,7 +138,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
                 field="transport_cost",
                 value=500.0,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Fixed Transportation & Freight: 500.00 INR flat charge per shipment",
                 status="extracted",
                 is_verified_fact=False
@@ -152,7 +152,7 @@ def create_mock_supplier_alpha(source_file: str = "synthetic_supplier_alpha.pdf"
     )
 
 
-def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") -> SupplierQuotation:
+def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf", source_page: Optional[int] = 1) -> SupplierQuotation:
     """Generate deterministic synthetic quotation for Supplier Beta (Missing Freight & Ambiguous Delivery)."""
     return SupplierQuotation(
         supplier_id="SUP-002",
@@ -174,7 +174,7 @@ def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") 
                 field="unit_price",
                 value=72.50,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Unit Price: 72.50 INR per bottle",
                 status="extracted",
                 is_verified_fact=False
@@ -183,7 +183,7 @@ def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") 
                 field="moq",
                 value=300,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Minimum Order Quantity (MOQ): 300 units",
                 status="extracted",
                 is_verified_fact=False
@@ -192,7 +192,7 @@ def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") 
                 field="delivery_days",
                 value="5 to 14 business days",
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Delivery Lead Time: 5 to 14 business days (variable depending on transport backlog)",
                 status="ambiguous",
                 notes="Wide delivery window dependent on external backlog",
@@ -202,7 +202,7 @@ def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") 
                 field="transport_cost",
                 value=None,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Freight / Shipping: To be determined upon delivery destination (Not Included)",
                 status="extracted",
                 notes="Freight not quoted by supplier; pending destination",
@@ -217,7 +217,7 @@ def create_mock_supplier_beta(source_file: str = "synthetic_supplier_beta.pdf") 
     )
 
 
-def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf") -> SupplierQuotation:
+def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf", source_page: Optional[int] = 1) -> SupplierQuotation:
     """Generate deterministic synthetic quotation for Supplier Gamma (Conflicting Rush Pricing)."""
     return SupplierQuotation(
         supplier_id="SUP-003",
@@ -239,7 +239,7 @@ def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf"
                 field="unit_price",
                 value=85.0,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Standard Unit Price: 85.00 INR per bottle",
                 status="conflicting",
                 notes="Standard pricing baseline",
@@ -249,7 +249,7 @@ def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf"
                 field="unit_price",
                 value=95.0,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Urgent Dispatch Unit Price: 95.00 INR per bottle (contradictory rush pricing stated)",
                 status="conflicting",
                 notes="Alternative rush pricing conflicts with standard rate",
@@ -259,7 +259,7 @@ def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf"
                 field="moq",
                 value=50,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Minimum Order Quantity (MOQ): 50 units",
                 status="extracted",
                 is_verified_fact=False
@@ -268,7 +268,7 @@ def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf"
                 field="capacity",
                 value=400,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Maximum Production Capacity: 400 units",
                 status="extracted",
                 is_verified_fact=False
@@ -277,7 +277,7 @@ def create_mock_supplier_gamma(source_file: str = "synthetic_supplier_gamma.pdf"
                 field="delivery_days",
                 value=3,
                 source_file=source_file,
-                source_page=1,
+                source_page=source_page,
                 source_excerpt="Delivery Lead Time: 3 business days",
                 status="extracted",
                 is_verified_fact=False
@@ -298,13 +298,33 @@ def mock_extract_supplier_data(
 ) -> SupplierQuotation:
     """Deterministic mock extraction fallback when Ollama is unavailable or mock mode is requested."""
     text_lower = (document_text or "").lower()
+    page_target = source_pages if isinstance(source_pages, int) else 1
     
+    if not text_lower.strip():
+        return SupplierQuotation(
+            supplier_id="SUP-UNSPECIFIED",
+            supplier_name="Unspecified Supplier",
+            unit_price=None,
+            currency="INR",
+            moq=None,
+            capacity=None,
+            delivery_days=None,
+            transport_cost=None,
+            missing_fields=["capacity", "delivery_days", "moq", "transport_cost", "unit_price"],
+            claims=[],
+            metadata={
+                "extraction_engine": "MOCK_FALLBACK (Empty Document)",
+                "is_synthetic": True,
+                "warning": "Empty document text provided; all values are null."
+            }
+        )
+
     if "gamma" in text_lower or "greensource" in text_lower or "sup-003" in text_lower:
-        return create_mock_supplier_gamma(source_file)
+        return create_mock_supplier_gamma(source_file, source_page=page_target)
     elif "beta" in text_lower or "bluewave" in text_lower or "sup-002" in text_lower:
-        return create_mock_supplier_beta(source_file)
+        return create_mock_supplier_beta(source_file, source_page=page_target)
     elif "alpha" in text_lower or "apex" in text_lower or "sup-001" in text_lower:
-        return create_mock_supplier_alpha(source_file)
+        return create_mock_supplier_alpha(source_file, source_page=page_target)
     
     # For custom documents, run rule-based heuristic extraction so real document
     # excerpts, line contents, and page numbers are preserved.
@@ -319,4 +339,4 @@ def mock_extract_supplier_data(
         return heuristic_res
 
     # Default fallback to clean Alpha profile
-    return create_mock_supplier_alpha(source_file)
+    return create_mock_supplier_alpha(source_file, source_page=page_target)
