@@ -55,37 +55,73 @@ def test_scenario_price_increase_reallocation(baseline_suppliers):
     assert "Volume reallocation" in result["narrative_explanation"]
 
 
+def test_scenario_transport_cost_change(baseline_suppliers):
+    # Baseline: SUP-001 takes 200 units. Cost = 200 * 50 + 100 = 10100.
+    # Scenario: Transport cost increases by 500 INR for SUP-001 -> new transport = 600.
+    # SUP-001 cost: 200 * 50 + 600 = 10600.
+    # SUP-002 cost: 200 * 55 + 100 = 11100.
+    # SUP-001 is still cheaper, but total spend increases by 500.
+    scenario = {
+        "type": "transport_cost_change",
+        "supplier_id": "SUP-001",
+        "amount": 500.0,
+    }
+    result = simulate_scenario(baseline_suppliers, demand=200, scenario=scenario)
+    assert result["is_feasible"] is True
+    assert result["total_cost_delta"] == 500.0
+    assert "Adjusted transport cost for SUP-001" in result["narrative_explanation"]
+
+
+def test_scenario_supplier_unavailability(baseline_suppliers):
+    # Baseline: SUP-001 takes all 200 units.
+    # Scenario: SUP-001 is shut down / unavailable.
+    scenario = {
+        "type": "supplier_unavailability",
+        "supplier_id": "SUP-001",
+    }
+    result = simulate_scenario(baseline_suppliers, demand=200, scenario=scenario)
+    assert result["is_feasible"] is True
+    assert result["quantity_changes"]["SUP-001"] == -200
+    assert result["quantity_changes"]["SUP-002"] == 200
+    assert result["total_cost_delta"] == 1000.0
+    assert "Supplier SUP-001 marked UNAVAILABLE" in result["narrative_explanation"]
+
+
+def test_scenario_multiplier_maps(baseline_suppliers):
+    # Person 2 compatibility: price_multipliers and capacity_reductions maps
+    scenario = {
+        "price_multipliers": {"SUP-001": 1.25},  # 50 * 1.25 = 62.5
+        "capacity_reductions": {"SUP-002": 0.50}, # 300 * 0.5 = 150
+    }
+    # Demand = 200. SUP-002 is cheaper (55 vs 62.5) but capped at 150.
+    # SUP-002 takes 150, remaining 50 spills to SUP-001.
+    result = simulate_scenario(baseline_suppliers, demand=200, scenario=scenario)
+    assert result["is_feasible"] is True
+    assert result["quantity_changes"]["SUP-002"] == 150
+    assert result["quantity_changes"]["SUP-001"] == -150
+
+
 def test_scenario_capacity_reduction_spillover(baseline_suppliers):
-    # Demand = 250.
-    # Baseline: SUP-001 (cap 300) takes all 250 units.
-    # Scenario: SUP-001 capacity reduced by 50% -> 150 units.
-    # SUP-001 can only take 150 units; remaining 100 must spill over to SUP-002.
     scenario = {
         "type": "capacity_reduction",
         "supplier_id": "SUP-001",
         "percentage": 50.0,
     }
     result = simulate_scenario(baseline_suppliers, demand=250, scenario=scenario)
-
     assert result["is_feasible"] is True
     assert result["quantity_changes"]["SUP-001"] == -100
     assert result["quantity_changes"]["SUP-002"] == 100
-
-    # SUP-002 has higher unit price, so cost increases
     assert result["total_cost_delta"] > 0
     assert "Reduced capacity for SUP-001" in result["narrative_explanation"]
 
 
 def test_scenario_capacity_reduction_feasibility_loss(baseline_suppliers):
-    # Total baseline capacity = 600. Demand = 500.
-    # Scenario: SUP-001 capacity reduced by 90% (to 30). Total capacity = 30 + 300 = 330 < 500.
     scenario = {
         "type": "capacity_reduction",
         "supplier_id": "SUP-001",
         "percentage": 90.0,
     }
     result = simulate_scenario(baseline_suppliers, demand=500, scenario=scenario)
-
     assert result["baseline_status"] == "optimal"
     assert result["is_feasible"] is False
     assert result["scenario_status"] == "infeasible"
@@ -93,7 +129,6 @@ def test_scenario_capacity_reduction_feasibility_loss(baseline_suppliers):
 
 
 def test_scenario_compound(baseline_suppliers):
-    # Compound: SUP-001 price up 10% AND SUP-002 capacity reduced by 50%
     scenario = {
         "type": "compound",
         "scenarios": [

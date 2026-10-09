@@ -15,12 +15,22 @@ from procurax.models import (
     OptimizationSummary,
     ScenarioImpact,
 )
+from procurax.services import (
+    BaseOptimizationService,
+    BaseGraphService,
+    ProcuraXOptimizationService,
+    ProcuraXGraphService,
+)
 
 __all__ = [
     "calculate_landed_cost",
     "optimize_allocation",
     "simulate_scenario",
     "build_procurement_graph",
+    "BaseOptimizationService",
+    "BaseGraphService",
+    "ProcuraXOptimizationService",
+    "ProcuraXGraphService",
     "Supplier",
     "Claim",
     "CostBreakdown",

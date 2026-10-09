@@ -1,10 +1,12 @@
 """
 Task 3: Scenario Simulation Engine for ProcuraX.
 
-Simulates what-if procurement scenarios:
-1. Supplier price increases (single supplier or market-wide)
-2. Supplier capacity reductions / disruptions
-3. Combined disruption scenarios
+Simulates what-if procurement risk scenarios:
+1. Supplier price increases (single supplier or market-wide, percentage or multipliers)
+2. Transport-cost changes (fuel surcharges, freight increases, fixed or percentage)
+3. Supplier capacity reductions / bottlenecks
+4. Supplier unavailability / factory shutdowns
+5. Compound and multi-disruption scenarios
 
 Recalculates allocations, measures cost and quantity deltas, assesses feasibility shifts,
 and generates narrative explanations of the sourcing impact.
@@ -19,7 +21,7 @@ from procurax.models import Supplier
 def simulate_scenario(
     suppliers: List[Union[Dict[str, Any], Supplier]],
     demand: int,
-    scenario: Dict[str, Any],
+    scenario: Union[Dict[str, Any], Any],
     budget: Optional[float] = None,
     currency_rates: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
@@ -29,12 +31,15 @@ def simulate_scenario(
     Args:
         suppliers: Baseline supplier list.
         demand: Total required purchase demand.
-        scenario: Dict defining the disruption:
-            - type: "price_increase" | "capacity_reduction" | "compound"
+        scenario: Dict or Pydantic OptimizationScenario defining the disruption:
+            - type: "price_increase" | "transport_cost_change" | "capacity_reduction" | "supplier_unavailability" | "compound"
             - supplier_id: Target supplier ID, or "ALL" / None for global
-            - percentage: Disruptive percentage change (e.g. 20.0 for 20% price hike)
-            - reduction_amount: Direct unit reduction for capacity (optional alternative)
-            - scenarios: List of sub-scenarios if type == "compound"
+            - percentage: Percentage change (e.g., 20.0 for 20% increase/reduction)
+            - amount: Absolute cost delta or unit change
+            - price_multipliers: dict[str, float] (Person 2 compatibility, e.g. {"SUP-001": 1.25})
+            - capacity_reductions: dict[str, float] (e.g. {"SUP-001": 0.50} for 50% cut)
+            - transport_multipliers: dict[str, float] (e.g. {"SUP-001": 1.30})
+            - unavailable_suppliers: list[str] (e.g. ["SUP-002"])
         budget: Spending limit (optional).
         currency_rates: Multi-currency conversion rates (optional).
 
@@ -54,53 +59,144 @@ def simulate_scenario(
     for s in suppliers:
         if isinstance(s, Supplier):
             modified_suppliers.append(s.model_dump())
+        elif hasattr(s, "model_dump"):
+            modified_suppliers.append(s.model_dump())
         else:
             modified_suppliers.append(copy.deepcopy(dict(s)))
 
-    # 3. Apply scenario modifications
-    scenario_type = scenario.get("type", "unknown")
+    # Convert Pydantic scenario if needed
+    if hasattr(scenario, "model_dump"):
+        sc_dict = scenario.model_dump()
+    elif isinstance(scenario, dict):
+        sc_dict = dict(scenario)
+    else:
+        sc_dict = {"type": "unknown"}
+
+    scenario_type = sc_dict.get("type", "custom")
     applied_changes: List[str] = []
+    unavailable_list: List[str] = []
 
     def apply_single_scenario(sc: Dict[str, Any]):
         stype = sc.get("type")
         target_id = sc.get("supplier_id")
         pct = float(sc.get("percentage") or 0.0)
+        amt = sc.get("amount")
         red_amount = sc.get("reduction_amount")
 
-        if stype == "price_increase":
+        # 1. Price increases / multipliers
+        if stype in ("price_increase", "price_change"):
             for s in modified_suppliers:
-                if target_id in (None, "ALL") or s.get("supplier_id") == target_id:
+                sid = s.get("supplier_id")
+                if target_id in (None, "ALL") or sid == target_id:
                     curr_price = s.get("unit_price")
                     if curr_price is not None:
-                        new_price = round(float(curr_price) * (1.0 + (pct / 100.0)), 4)
-                        s["unit_price"] = new_price
-                        applied_changes.append(
-                            f"Increased unit price for {s.get('supplier_id')} from {curr_price} to {new_price} (+{pct}%)."
-                        )
+                        if amt is not None:
+                            new_price = round(max(0.0, float(curr_price) + float(amt)), 4)
+                            s["unit_price"] = new_price
+                            applied_changes.append(
+                                f"Changed unit price for {sid} from {curr_price} to {new_price} ({amt:+})."
+                            )
+                        else:
+                            new_price = round(float(curr_price) * (1.0 + (pct / 100.0)), 4)
+                            s["unit_price"] = new_price
+                            applied_changes.append(
+                                f"Increased unit price for {sid} from {curr_price} to {new_price} (+{pct}%)."
+                            )
 
-        elif stype == "capacity_reduction":
+        # 2. Transport cost changes (fuel surge, carrier changes)
+        elif stype in ("transport_cost_change", "transport_change", "transport_increase"):
             for s in modified_suppliers:
-                if target_id in (None, "ALL") or s.get("supplier_id") == target_id:
+                sid = s.get("supplier_id")
+                if target_id in (None, "ALL") or sid == target_id:
+                    curr_t = s.get("transport_cost")
+                    if curr_t is not None:
+                        if amt is not None:
+                            new_t = round(max(0.0, float(curr_t) + float(amt)), 2)
+                            s["transport_cost"] = new_t
+                            applied_changes.append(
+                                f"Adjusted transport cost for {sid} from {curr_t} to {new_t} ({amt:+})."
+                            )
+                        else:
+                            new_t = round(float(curr_t) * (1.0 + (pct / 100.0)), 2)
+                            s["transport_cost"] = new_t
+                            applied_changes.append(
+                                f"Adjusted transport cost for {sid} from {curr_t} to {new_t} (+{pct}%)."
+                            )
+
+        # 3. Capacity reductions
+        elif stype in ("capacity_reduction", "capacity_drop"):
+            for s in modified_suppliers:
+                sid = s.get("supplier_id")
+                if target_id in (None, "ALL") or sid == target_id:
                     curr_cap = s.get("capacity")
                     if curr_cap is not None:
                         if red_amount is not None:
                             new_cap = max(0, int(curr_cap) - int(red_amount))
                             s["capacity"] = new_cap
                             applied_changes.append(
-                                f"Reduced capacity for {s.get('supplier_id')} by {red_amount} units (from {curr_cap} to {new_cap})."
+                                f"Reduced capacity for {sid} by {red_amount} units (from {curr_cap} to {new_cap})."
                             )
                         else:
                             new_cap = max(0, int(round(float(curr_cap) * (1.0 - (pct / 100.0)))))
                             s["capacity"] = new_cap
                             applied_changes.append(
-                                f"Reduced capacity for {s.get('supplier_id')} by {pct}% (from {curr_cap} to {new_cap})."
+                                f"Reduced capacity for {sid} by {pct}% (from {curr_cap} to {new_cap})."
                             )
 
+        # 4. Supplier unavailability / factory shutdowns
+        elif stype in ("supplier_unavailability", "supplier_shutdown", "unavailability"):
+            targets = [target_id] if target_id else sc.get("supplier_ids", [])
+            for tid in targets:
+                if tid:
+                    unavailable_list.append(tid)
+                    for s in modified_suppliers:
+                        if s.get("supplier_id") == tid:
+                            s["is_available"] = False
+                            s["capacity"] = 0
+                            applied_changes.append(f"Supplier {tid} marked UNAVAILABLE (capacity set to 0).")
+
+    # Support Person 2's OptimizationScenario schema (price_multipliers & capacity_reductions)
+    if "price_multipliers" in sc_dict:
+        for sid, mult in sc_dict["price_multipliers"].items():
+            for s in modified_suppliers:
+                if s.get("supplier_id") == sid and s.get("unit_price") is not None:
+                    old_p = s["unit_price"]
+                    new_p = round(float(old_p) * float(mult), 4)
+                    s["unit_price"] = new_p
+                    applied_changes.append(f"Applied price multiplier {mult}x to {sid} ({old_p} -> {new_p}).")
+
+    if "capacity_reductions" in sc_dict:
+        for sid, ratio in sc_dict["capacity_reductions"].items():
+            for s in modified_suppliers:
+                if s.get("supplier_id") == sid and s.get("capacity") is not None:
+                    old_c = s["capacity"]
+                    new_c = max(0, int(round(float(old_c) * (1.0 - float(ratio)))))
+                    s["capacity"] = new_c
+                    applied_changes.append(f"Applied capacity reduction of {ratio*100}% to {sid} ({old_c} -> {new_c}).")
+
+    if "transport_multipliers" in sc_dict:
+        for sid, mult in sc_dict["transport_multipliers"].items():
+            for s in modified_suppliers:
+                if s.get("supplier_id") == sid and s.get("transport_cost") is not None:
+                    old_t = s["transport_cost"]
+                    new_t = round(float(old_t) * float(mult), 2)
+                    s["transport_cost"] = new_t
+                    applied_changes.append(f"Applied transport multiplier {mult}x to {sid} ({old_t} -> {new_t}).")
+
+    if "unavailable_suppliers" in sc_dict:
+        for sid in sc_dict["unavailable_suppliers"]:
+            unavailable_list.append(sid)
+            for s in modified_suppliers:
+                if s.get("supplier_id") == sid:
+                    s["is_available"] = False
+                    s["capacity"] = 0
+                    applied_changes.append(f"Supplier {sid} marked UNAVAILABLE.")
+
     if scenario_type == "compound":
-        for sub_sc in scenario.get("scenarios", []):
+        for sub_sc in sc_dict.get("scenarios", []):
             apply_single_scenario(sub_sc)
     else:
-        apply_single_scenario(scenario)
+        apply_single_scenario(sc_dict)
 
     # 4. Scenario optimization
     scenario_result = optimize_allocation(
@@ -108,6 +204,7 @@ def simulate_scenario(
         demand=demand,
         budget=budget,
         currency_rates=currency_rates,
+        unavailable_suppliers=unavailable_list,
     )
 
     # 5. Calculate Deltas
@@ -182,7 +279,7 @@ def simulate_scenario(
 
     return {
         "scenario_type": scenario_type,
-        "parameters": scenario,
+        "parameters": sc_dict,
         "baseline_status": baseline_result.get("status", "unknown"),
         "scenario_status": scenario_result.get("status", "unknown"),
         "is_feasible": scenario_result.get("is_feasible", False),

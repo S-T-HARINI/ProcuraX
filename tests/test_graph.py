@@ -21,7 +21,7 @@ def graph_test_suppliers():
             "capacity": 600,
             "delivery_days": 5,
             "transport_cost": 500.0,
-            "sustainability_claims": ["100% Recycled PET"],
+            "sustainability_claims": ["100% Recycled PET", "Zero Landfill Certified"],
             "missing_fields": [],
             "claims": [
                 {
@@ -110,7 +110,38 @@ def test_claims_unverified_by_default(graph_test_suppliers):
     for cn in claim_nodes:
         # Crucial Innovation Rule: Claims must not be marked verified facts!
         assert cn["is_verified"] is False
-        assert cn["status"] == "extracted"
+
+
+def test_sustainability_claims_unverified(graph_test_suppliers):
+    allocation = optimize_allocation(graph_test_suppliers, demand=100)
+    graph = build_procurement_graph(graph_test_suppliers, allocation)
+
+    # Check that sustainability claims are represented as unverified claims
+    sust_nodes = [n for n in graph["nodes"] if n.get("category") == "sustainability"]
+    assert len(sust_nodes) == 2
+    for sn in sust_nodes:
+        assert sn["is_verified"] is False
+        assert sn["status"] == "unverified"
+        assert "Sustainability Claim" in sn["label"]
+
+
+def test_conflicts_representation(graph_test_suppliers):
+    allocation = optimize_allocation(graph_test_suppliers, demand=100)
+    conflicts = [
+        {
+            "field": "lead_time",
+            "description": "SUP-001 claims 5 days whereas SUP-002 has missing lead times.",
+            "supplier_ids": ["SUP-001", "SUP-002"],
+        }
+    ]
+    graph = build_procurement_graph(graph_test_suppliers, allocation, conflicts=conflicts)
+
+    conflict_nodes = [n for n in graph["nodes"] if n["type"] == "conflict"]
+    assert len(conflict_nodes) == 1
+    assert conflict_nodes[0]["field"] == "lead_time"
+
+    conflict_edges = [e for e in graph["edges"] if e.get("type") == "HAS_CONFLICT"]
+    assert len(conflict_edges) == 2
 
 
 def test_evidence_linkage(graph_test_suppliers):

@@ -6,6 +6,7 @@ Uses NetworkX to construct a directed knowledge & lineage graph connecting:
 - Extracted claims
 - Source excerpts and page references
 - Missing and conflicting information
+- Sustainability claims (unverified by default)
 - Cost calculations
 - Supplier risks
 - Optimization allocations
@@ -24,8 +25,8 @@ from procurax.models import Supplier
 
 
 def build_procurement_graph(
-    suppliers: List[Union[Dict[str, Any], Supplier]],
-    allocation: Dict[str, Any],
+    suppliers: List[Union[Dict[str, Any], Any]],
+    allocation: Union[Dict[str, Any], Any],
     risks: Optional[List[Dict[str, Any]]] = None,
     conflicts: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
@@ -33,12 +34,10 @@ def build_procurement_graph(
     Construct the Evidence-to-Decision Consistency Graph using NetworkX.
 
     Args:
-        suppliers: List of supplier dicts or Supplier models following the shared contract.
-        allocation: Output from optimize_allocation().
+        suppliers: List of supplier dicts, Supplier models, or Person 2's SupplierQuote models.
+        allocation: Output from optimize_allocation() or Person 2's OptimizationResponse.
         risks: Optional list of identified supplier or supply chain risks.
-               Example: [{"supplier_id": "SUP-001", "risk_type": "Capacity Concentration", "severity": "medium", "description": "Takes 80% of demand"}]
         conflicts: Optional list of detected conflicting claims/data.
-               Example: [{"field": "delivery_days", "description": "Contradictory lead times found", "supplier_ids": ["SUP-001"]}]
 
     Returns:
         JSON-compatible dict containing:
@@ -49,20 +48,28 @@ def build_procurement_graph(
     """
     G = nx.DiGraph()
 
-    # Normalize suppliers
+    # Normalize suppliers to dicts
     supplier_dicts: List[Dict[str, Any]] = []
     for s in suppliers:
-        if isinstance(s, Supplier):
+        if isinstance(s, dict):
+            supplier_dicts.append(dict(s))
+        elif hasattr(s, "model_dump"):
             supplier_dicts.append(s.model_dump())
         else:
             supplier_dicts.append(dict(s))
 
+    # Normalize allocation to dict
+    if hasattr(allocation, "model_dump"):
+        alloc_dict = allocation.model_dump()
+    elif isinstance(allocation, dict):
+        alloc_dict = dict(allocation)
+    else:
+        alloc_dict = {}
+
     documents_seen = set()
     missing_info_nodes = []
-    allocated_supplier_ids = {
-        a["supplier_id"] for a in allocation.get("allocations", []) if a.get("allocated_quantity", 0) > 0
-    }
     incomplete_suppliers_allocated = []
+    unverified_claims_count = 0
 
     # 1. Process Suppliers, Claims, Documents, Evidence, and Missing Info
     for s in supplier_dicts:
@@ -85,7 +92,6 @@ def build_procurement_graph(
 
         # Missing Fields Nodes
         missing_fields = list(s.get("missing_fields") or [])
-        # Check if unit_price or transport_cost or capacity were null but not in missing_fields
         for field_name in ["unit_price", "transport_cost", "capacity", "moq", "delivery_days"]:
             if s.get(field_name) is None and field_name not in missing_fields:
                 missing_fields.append(field_name)
@@ -111,13 +117,21 @@ def build_procurement_graph(
             )
             missing_info_nodes.append((sup_id, m_node_id, mf))
 
-        # Claims & Evidence
+        # Extracted Claims & Evidence
         claims = s.get("claims") or []
         for idx, claim in enumerate(claims):
-            c_dict = claim if isinstance(claim, dict) else claim.model_dump()
+            if hasattr(claim, "model_dump"):
+                c_dict = claim.model_dump()
+            elif isinstance(claim, dict):
+                c_dict = dict(claim)
+            else:
+                c_dict = {"field": f"claim_{idx}", "value": str(claim)}
+
             c_field = c_dict.get("field", f"claim_{idx}")
             c_value = c_dict.get("value")
             c_status = c_dict.get("status", "extracted")
+            if hasattr(c_status, "value"):
+                c_status = c_status.value
             src_file = c_dict.get("source_file")
             src_page = c_dict.get("source_page")
             src_excerpt = c_dict.get("source_excerpt")
@@ -135,6 +149,8 @@ def build_procurement_graph(
                 is_verified=False,  # Unverified supplier claim
                 supplier_id=sup_id,
             )
+            unverified_claims_count += 1
+
             G.add_edge(
                 s_node_id,
                 c_node_id,
@@ -187,30 +203,56 @@ def build_procurement_graph(
                     label="supported by excerpt",
                 )
 
-    # 2. Conflicts (if any)
-    if conflicts:
-        for idx, conf in enumerate(conflicts):
-            conf_node_id = f"conflict:{conf.get('field', idx)}:{idx}"
+        # Sustainability Claims: Represent explicitly as UNVERIFIED claims
+        sustainability_claims = s.get("sustainability_claims") or []
+        for s_idx, s_claim in enumerate(sustainability_claims):
+            sc_node_id = f"claim:{sup_id}:sustainability:{s_idx}"
             G.add_node(
-                conf_node_id,
-                id=conf_node_id,
-                type="conflict",
-                label=f"Conflict: {conf.get('field', 'Contradiction')}",
-                description=conf.get("description", "Conflicting claims detected"),
-                field=conf.get("field"),
-                supplier_ids=conf.get("supplier_ids", []),
+                sc_node_id,
+                id=sc_node_id,
+                type="claim",
+                label=f"Sustainability Claim: {s_claim}",
+                field="sustainability",
+                value=s_claim,
+                status="unverified",
+                is_verified=False,  # Do not treat sustainability claims as confirmed facts!
+                supplier_id=sup_id,
+                category="sustainability",
             )
-            for sid in conf.get("supplier_ids", []):
-                s_node = f"supplier:{sid}"
-                if G.has_node(s_node):
-                    G.add_edge(
-                        s_node,
-                        conf_node_id,
-                        source=s_node,
-                        target=conf_node_id,
-                        type="HAS_CONFLICT",
-                        label="involved in conflict",
-                    )
+            unverified_claims_count += 1
+            G.add_edge(
+                s_node_id,
+                sc_node_id,
+                source=s_node_id,
+                target=sc_node_id,
+                type="CLAIMS",
+                label="makes sustainability claim (unverified)",
+            )
+
+    # 2. Conflicts (Explicit and Auto-detected)
+    conflict_list = list(conflicts or [])
+    for idx, conf in enumerate(conflict_list):
+        conf_node_id = f"conflict:{conf.get('field', idx)}:{idx}"
+        G.add_node(
+            conf_node_id,
+            id=conf_node_id,
+            type="conflict",
+            label=f"Conflict: {conf.get('field', 'Contradiction')}",
+            description=conf.get("description", "Conflicting claims detected"),
+            field=conf.get("field"),
+            supplier_ids=conf.get("supplier_ids", []),
+        )
+        for sid in conf.get("supplier_ids", []):
+            s_node = f"supplier:{sid}"
+            if G.has_node(s_node):
+                G.add_edge(
+                    s_node,
+                    conf_node_id,
+                    source=s_node,
+                    target=conf_node_id,
+                    type="HAS_CONFLICT",
+                    label="involved in conflict",
+                )
 
     # 3. Cost Calculation Nodes
     for s in supplier_dicts:
@@ -240,7 +282,6 @@ def build_procurement_graph(
             label="calculates landed cost",
         )
 
-        # Link relevant pricing claims to cost node
         for n, attrs in list(G.nodes(data=True)):
             if attrs.get("type") == "claim" and attrs.get("supplier_id") == sup_id:
                 if attrs.get("field") in ["unit_price", "transport_cost", "moq"]:
@@ -279,7 +320,7 @@ def build_procurement_graph(
                 )
 
     # 5. Optimization & Allocation Nodes
-    allocations = allocation.get("allocations", [])
+    allocations = alloc_dict.get("allocations", [])
     recommendation_node_id = "decision:recommendation"
 
     # Final Decision / Recommendation Node
@@ -288,20 +329,27 @@ def build_procurement_graph(
         id=recommendation_node_id,
         type="recommendation",
         label="Sourcing Recommendation",
-        status=allocation.get("status", "unknown"),
-        is_feasible=allocation.get("is_feasible", False),
-        demanded_quantity=allocation.get("requested_demand", 0),
-        allocated_quantity=allocation.get("allocated_demand", 0),
-        total_procurement_cost=allocation.get("total_cost"),
-        currency=allocation.get("currency", "INR"),
-        budget=allocation.get("budget"),
-        budget_utilized_pct=allocation.get("budget_utilized_pct"),
+        status=alloc_dict.get("status", "unknown"),
+        is_feasible=alloc_dict.get("is_feasible", False),
+        demanded_quantity=alloc_dict.get("requested_demand") or alloc_dict.get("target_demand", 0),
+        allocated_quantity=alloc_dict.get("allocated_demand") or alloc_dict.get("total_allocated_quantity", 0),
+        total_procurement_cost=alloc_dict.get("total_cost") or alloc_dict.get("total_landed_cost"),
+        currency=alloc_dict.get("currency", "INR"),
+        budget=alloc_dict.get("budget") or alloc_dict.get("budget_limit"),
+        budget_utilized_pct=alloc_dict.get("budget_utilized_pct"),
     )
 
     for alloc in allocations:
-        sup_id = alloc.get("supplier_id", "UNKNOWN")
-        qty = alloc.get("allocated_quantity", 0)
-        cost_bd = alloc.get("cost_breakdown") or {}
+        if hasattr(alloc, "model_dump"):
+            a_data = alloc.model_dump()
+        else:
+            a_data = dict(alloc)
+
+        sup_id = a_data.get("supplier_id", "UNKNOWN")
+        qty = a_data.get("allocated_quantity", 0)
+        cost_bd = a_data.get("cost_breakdown") or {}
+        landed = a_data.get("landed_cost") or cost_bd.get("total_landed_cost")
+        cost_unit = a_data.get("effective_unit_price") or cost_bd.get("cost_per_unit")
 
         alloc_node_id = f"allocation:{sup_id}"
         G.add_node(
@@ -311,12 +359,11 @@ def build_procurement_graph(
             label=f"Allocated: {qty} units ({sup_id})",
             supplier_id=sup_id,
             quantity=qty,
-            share_of_demand_pct=alloc.get("share_of_demand_pct", 0.0),
-            total_landed_cost=cost_bd.get("total_landed_cost"),
-            cost_per_unit=cost_bd.get("cost_per_unit"),
+            share_of_demand_pct=a_data.get("share_of_demand_pct", 0.0),
+            total_landed_cost=landed,
+            cost_per_unit=cost_unit,
         )
 
-        # Link Cost calculation -> Allocation
         cost_node_id = f"cost:{sup_id}"
         if G.has_node(cost_node_id):
             G.add_edge(
@@ -328,7 +375,6 @@ def build_procurement_graph(
                 label="cost determines volume",
             )
 
-        # Link Risk -> Allocation (if risk exists for this supplier)
         if risks:
             for idx, r in enumerate(risks):
                 if r.get("supplier_id") == sup_id:
@@ -343,7 +389,6 @@ def build_procurement_graph(
                             label="risk factor",
                         )
 
-        # Link Allocation -> Final Recommendation
         G.add_edge(
             alloc_node_id,
             recommendation_node_id,
@@ -353,8 +398,7 @@ def build_procurement_graph(
             label="contributes to recommendation",
         )
 
-        # 6. Check if this allocated supplier had missing information
-        # Core Requirement: Identify when recommendations depend on incomplete information!
+        # Incomplete Dependency Detection
         sup_missing = [mf for (sid, m_id, mf) in missing_info_nodes if sid == sup_id]
         if sup_missing:
             incomplete_suppliers_allocated.append(sup_id)
@@ -369,10 +413,9 @@ def build_procurement_graph(
                         label="CAUTION: relies on missing data",
                     )
 
-    # Convert NetworkX graph to JSON-compatible data structures
+    # Convert NetworkX graph to JSON-compatible structures
     nodes_data: List[Dict[str, Any]] = []
     for n, attrs in G.nodes(data=True):
-        # Guarantee serializability
         clean_attrs = {}
         for k, v in attrs.items():
             if isinstance(v, (int, float, str, bool, list, dict)) or v is None:
@@ -391,14 +434,14 @@ def build_procurement_graph(
                 clean_attrs[k] = str(val)
         edges_data.append(clean_attrs)
 
-    # Decision audit analysis
+    # Decision audit summary
     depends_on_incomplete = len(incomplete_suppliers_allocated) > 0
     decision_audit = {
-        "status": allocation.get("status"),
-        "is_feasible": allocation.get("is_feasible"),
+        "status": alloc_dict.get("status"),
+        "is_feasible": alloc_dict.get("is_feasible"),
         "depends_on_incomplete_data": depends_on_incomplete,
         "affected_suppliers": list(set(incomplete_suppliers_allocated)),
-        "unverified_claims_count": sum(1 for n in nodes_data if n.get("type") == "claim" and not n.get("is_verified")),
+        "unverified_claims_count": unverified_claims_count,
         "documents_referenced": list(documents_seen),
         "total_nodes": len(nodes_data),
         "total_edges": len(edges_data),

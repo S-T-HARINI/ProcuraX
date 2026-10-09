@@ -20,11 +20,36 @@ def test_calculate_landed_cost_standard():
     assert result["quantity"] == 100
     assert result["base_cost"] == 8000.0
     assert result["transport_cost"] == 500.0
+    assert result["transport_cost_mode"] == "fixed_per_shipment"
     assert result["total_landed_cost"] == 8500.0
     assert result["cost_per_unit"] == 85.0
     assert result["currency"] == "INR"
     assert result["is_complete"] is True
     assert result["missing_cost_inputs"] == []
+
+
+def test_calculate_landed_cost_per_unit_transport():
+    # Transport cost quoted per unit (e.g., INR 5/unit)
+    supplier = {
+        "supplier_id": "SUP-PER-UNIT",
+        "supplier_name": "Per Unit Freight Supplier",
+        "unit_price": 80.0,
+        "currency": "INR",
+        "transport_cost": 5.0,
+        "transport_cost_type": "per_unit",
+    }
+    # For quantity 100: base = 8000, transport = 5 * 100 = 500, total = 8500
+    result = calculate_landed_cost(supplier, quantity=100)
+    assert result["transport_cost_mode"] == "per_unit"
+    assert result["transport_cost"] == 500.0
+    assert result["total_landed_cost"] == 8500.0
+    assert result["cost_per_unit"] == 85.0
+
+    # Overriding via explicit argument
+    res_override = calculate_landed_cost(supplier, quantity=100, transport_is_per_unit=False)
+    assert res_override["transport_cost_mode"] == "fixed_per_shipment"
+    assert res_override["transport_cost"] == 5.0
+    assert res_override["total_landed_cost"] == 8005.0
 
 
 def test_calculate_landed_cost_missing_unit_price():

@@ -54,6 +54,13 @@ def test_optimizer_demand_fulfillment(sample_suppliers):
     assert "SUP-002" in alloc_ids
     assert result["total_cost"] == 9500.0
 
+    # Verify supplier_breakdown contains all suppliers
+    breakdown = result["supplier_breakdown"]
+    assert len(breakdown) == 3
+    b_map = {b["supplier_id"]: b for b in breakdown}
+    assert b_map["SUP-002"]["status"] == "allocated"
+    assert b_map["SUP-001"]["status"] == "unassigned"
+
 
 def test_optimizer_capacity_and_split(sample_suppliers):
     # Demand = 400: Supplier B capacity is 200, Supplier A capacity is 300
@@ -82,7 +89,6 @@ def test_optimizer_moq_enforcement(sample_suppliers):
 
 def test_optimizer_budget_constraint(sample_suppliers):
     # Demand = 200, minimum cost is 9500
-    # If budget is 10000, it succeeds
     res_ok = optimize_allocation(sample_suppliers, demand=200, budget=10000.0)
     assert res_ok["is_feasible"] is True
     assert res_ok["total_cost"] <= 10000.0
@@ -120,4 +126,47 @@ def test_optimizer_missing_supplier_price(sample_suppliers):
     result = optimize_allocation(corrupt_suppliers, demand=100)
     assert result["is_feasible"] is True
     assert "SUP-BROKEN" in result["unassigned_suppliers"]
-    assert any("SUP-BROKEN" in w for w in result["warnings"])
+    assert "SUP-BROKEN" in result["exclusion_reasons"]
+    assert "unit_price is missing/null" in result["exclusion_reasons"]["SUP-BROKEN"]
+
+
+def test_optimizer_unavailable_supplier(sample_suppliers):
+    # If SUP-002 is marked unavailable, demand 200 must be fulfilled by SUP-001
+    result = optimize_allocation(sample_suppliers, demand=200, unavailable_suppliers=["SUP-002"])
+    assert result["is_feasible"] is True
+    alloc_ids = [a["supplier_id"] for a in result["allocations"]]
+    assert "SUP-002" not in alloc_ids
+    assert "SUP-001" in alloc_ids
+    assert "SUP-002" in result["exclusion_reasons"]
+
+
+def test_optimizer_per_unit_transport(sample_suppliers):
+    # Supplier A: unit_price 50, transport 200 flat -> for 100 units: 5000 + 200 = 5200
+    # Supplier with per_unit transport: unit_price 48, transport 5/unit -> for 100 units: 4800 + 500 = 5300
+    suppliers = [
+        {
+            "supplier_id": "SUP-FLAT",
+            "supplier_name": "Flat Transport",
+            "unit_price": 50.0,
+            "transport_cost": 200.0,
+            "transport_cost_type": "fixed_per_shipment",
+            "moq": 10,
+            "capacity": 200,
+            "currency": "INR",
+        },
+        {
+            "supplier_id": "SUP-UNIT",
+            "supplier_name": "Unit Transport",
+            "unit_price": 48.0,
+            "transport_cost": 5.0,
+            "transport_cost_type": "per_unit",
+            "moq": 10,
+            "capacity": 200,
+            "currency": "INR",
+        },
+    ]
+    result = optimize_allocation(suppliers, demand=100)
+    assert result["is_feasible"] is True
+    # SUP-FLAT total cost is 5200 vs SUP-UNIT 5300, so SUP-FLAT should win
+    assert result["allocations"][0]["supplier_id"] == "SUP-FLAT"
+    assert result["total_cost"] == 5200.0
