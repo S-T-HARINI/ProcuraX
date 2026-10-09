@@ -149,9 +149,14 @@ def test_evidence_linkage(graph_test_suppliers):
     allocation = optimize_allocation(graph_test_suppliers, demand=100)
     graph = build_procurement_graph(graph_test_suppliers, allocation)
 
-    # Check evidence nodes
+    # Check evidence nodes and page formatting
     evidence_nodes = [n for n in graph["nodes"] if n["type"] == "evidence"]
     assert len(evidence_nodes) >= 2
+    for en in evidence_nodes:
+        if en.get("page") is not None:
+            assert f"Evidence: p.{en['page']}" == en["label"]
+        else:
+            assert en["label"] == "Evidence Excerpt"
 
     # Check SUPPORTED_BY edges
     supported_edges = [e for e in graph["edges"] if e.get("type") == "SUPPORTED_BY"]
