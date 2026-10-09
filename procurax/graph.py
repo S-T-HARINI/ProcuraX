@@ -196,11 +196,12 @@ def build_procurement_graph(
             # Evidence Node (page & verbatim excerpt)
             if src_excerpt or src_page is not None:
                 ev_node_id = f"evidence:{sup_id}:{c_field}:{idx}"
+                ev_label = f"Evidence: p.{src_page}" if src_page is not None else "Evidence Excerpt"
                 G.add_node(
                     ev_node_id,
                     id=ev_node_id,
                     type="evidence",
-                    label=f"Evidence: p.{src_page or '?'}",
+                    label=ev_label,
                     source_file=src_file,
                     page=src_page,
                     excerpt=src_excerpt,
