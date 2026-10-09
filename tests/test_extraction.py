@@ -335,6 +335,22 @@ Sustainability: 100% Home Compostable
         self.assertEqual(contract["transport_cost"], 250.00)
         self.assertIn("Base Price: 15.50 INR", [c["source_excerpt"] for c in contract["claims"]])
 
+    def test_empty_document_handling(self):
+        """Verify empty quotation text returns null numeric values and flags missing fields without inventing facts."""
+        result = mock_extract_supplier_data("", "empty.pdf")
+        contract = result.to_contract_dict()
+        self.assertEqual(contract["supplier_id"], "SUP-UNSPECIFIED")
+        self.assertEqual(contract["supplier_name"], "Unspecified Supplier")
+        self.assertIsNone(contract["unit_price"])
+        self.assertIsNone(contract["moq"])
+        self.assertIsNone(contract["capacity"])
+        self.assertIsNone(contract["delivery_days"])
+        self.assertIsNone(contract["transport_cost"])
+        self.assertIn("unit_price", contract["missing_fields"])
+        self.assertIn("moq", contract["missing_fields"])
+        self.assertEqual(len(contract["claims"]), 0)
+
+
 
 class TestExtractionWithSampleDocumentsOffline(unittest.TestCase):
     """Test full extraction flow on sample documents without requiring a live Ollama model."""
