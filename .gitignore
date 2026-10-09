@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -37,7 +37,6 @@ htmlcov/
 
 # Node.js & Frontend
 node_modules/
-frontend/
 .next/
 out/
 npm-debug.log*
