@@ -303,6 +303,20 @@ def mock_extract_supplier_data(
         return create_mock_supplier_gamma(source_file)
     elif "beta" in text_lower or "bluewave" in text_lower or "sup-002" in text_lower:
         return create_mock_supplier_beta(source_file)
-    else:
-        # Default fallback to clean Alpha profile
+    elif "alpha" in text_lower or "apex" in text_lower or "sup-001" in text_lower:
         return create_mock_supplier_alpha(source_file)
+    
+    # For custom documents, run rule-based heuristic extraction so real document
+    # excerpts, line contents, and page numbers are preserved.
+    from procurax.extraction.validator import heuristic_extract_supplier_data
+    heuristic_res = heuristic_extract_supplier_data(
+        document_text=document_text,
+        source_file=source_file,
+        source_pages=source_pages,
+        engine_label="MOCK_FALLBACK (Heuristic Parser)"
+    )
+    if heuristic_res.claims:
+        return heuristic_res
+
+    # Default fallback to clean Alpha profile
+    return create_mock_supplier_alpha(source_file)

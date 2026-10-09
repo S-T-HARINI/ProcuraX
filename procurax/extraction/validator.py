@@ -26,7 +26,7 @@ CORE_PROCUREMENT_FIELDS = [
 def extract_json_from_text(raw_text: str) -> Dict[str, Any]:
     """Safely extract a JSON object from raw LLM output text.
     
-    Handles markdown code blocks (```json ... ```) and leading/trailing text.
+    Handles markdown code blocks (```json ... ```), trailing commas, and leading/trailing text.
     """
     cleaned = raw_text.strip()
     
@@ -39,10 +39,15 @@ def extract_json_from_text(raw_text: str) -> Dict[str, Any]:
     # Try finding markdown code block ```json ... ```
     match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
     if match:
+        block = match.group(1)
         try:
-            return json.loads(match.group(1))
+            return json.loads(block)
         except json.JSONDecodeError:
-            pass
+            sanitized = re.sub(r",\s*([\}\]])", r"\1", block)
+            try:
+                return json.loads(sanitized)
+            except json.JSONDecodeError:
+                pass
             
     # Try finding first outer { and last outer }
     start = cleaned.find("{")
@@ -52,9 +57,215 @@ def extract_json_from_text(raw_text: str) -> Dict[str, Any]:
         try:
             return json.loads(candidate)
         except json.JSONDecodeError:
-            pass
+            sanitized = re.sub(r",\s*([\}\]])", r"\1", candidate)
+            try:
+                return json.loads(sanitized)
+            except json.JSONDecodeError:
+                pass
 
     raise ValueError(f"Could not parse valid JSON from model response: {raw_text[:200]}...")
+
+
+def heuristic_extract_supplier_data(
+    document_text: str,
+    source_file: str,
+    source_pages: Optional[Union[int, List[int], Dict[int, str]]] = None,
+    engine_label: str = "HEURISTIC_FALLBACK (Rule-Based Parser)"
+) -> SupplierQuotation:
+    """Extract procurement claims deterministically using pattern heuristics from document text.
+    
+    Used when the LLM is offline or outputs malformed text, ensuring verbatim
+    excerpts and real page numbers from the source document are preserved.
+    """
+    lines = [line.strip() for line in (document_text or "").splitlines() if line.strip()]
+    
+    extracted_data: Dict[str, Any] = {
+        "supplier_id": None,
+        "supplier_name": None,
+        "product_name": None,
+        "unit_price": None,
+        "currency": None,
+        "moq": None,
+        "capacity": None,
+        "delivery_days": None,
+        "transport_cost": None,
+        "discount_terms": None,
+        "sustainability_claims": [],
+        "missing_fields": [],
+        "ambiguous_fields": [],
+        "conflicting_fields": [],
+        "claims": []
+    }
+    
+    claims_list: List[Dict[str, Any]] = []
+    
+    for line in lines:
+        lower = line.lower()
+        
+        # Supplier ID
+        if re.search(r"supplier\s*id\s*:", lower):
+            m = re.search(r"supplier\s*id\s*:\s*([A-Za-z0-9_-]+)", line, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                extracted_data["supplier_id"] = val
+                claims_list.append({
+                    "field": "supplier_id",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Supplier Name
+        elif re.search(r"supplier(?:\s*name)?\s*:", lower):
+            m = re.search(r"supplier(?:\s*name)?\s*:\s*([^\n\r,]+)", line, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                extracted_data["supplier_name"] = val
+                claims_list.append({
+                    "field": "supplier_name",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Product / Item
+        elif re.search(r"(?:product|item)(?:\s*name)?\s*:", lower):
+            m = re.search(r"(?:product|item)(?:\s*name)?\s*:\s*([^\n\r]+)", line, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                extracted_data["product_name"] = val
+                claims_list.append({
+                    "field": "product_name",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Unit Price
+        if re.search(r"(?:unit\s*price|base\s*price|rate)\s*:", lower):
+            # Check currency
+            curr_match = re.search(r"\b(INR|USD|EUR|GBP|Rs\.?)\b", line, re.IGNORECASE)
+            if curr_match:
+                extracted_data["currency"] = curr_match.group(1).upper()
+            elif "$" in line:
+                extracted_data["currency"] = "USD"
+            elif "₹" in line:
+                extracted_data["currency"] = "INR"
+
+            # Check price value
+            num_m = re.search(r"(\d+(?:\.\d+)?)", line)
+            if num_m:
+                val = float(num_m.group(1))
+                is_conflicting = "rush" in lower or "urgent" in lower or "contradictory" in lower
+                if is_conflicting or (extracted_data["unit_price"] is not None and extracted_data["unit_price"] != val):
+                    claims_list.append({
+                        "field": "unit_price",
+                        "value": val,
+                        "source_excerpt": line,
+                        "status": "conflicting",
+                        "notes": "Contradictory or rush pricing quote"
+                    })
+                    if "unit_price" not in extracted_data["conflicting_fields"]:
+                        extracted_data["conflicting_fields"].append("unit_price")
+                else:
+                    extracted_data["unit_price"] = val
+                    claims_list.append({
+                        "field": "unit_price",
+                        "value": val,
+                        "source_excerpt": line,
+                        "status": "extracted"
+                    })
+        # MOQ
+        elif re.search(r"(?:moq|minimum\s*order(?:\s*quantity)?)\s*:", lower):
+            num_m = re.search(r"(\d+)", line)
+            if num_m:
+                val = int(num_m.group(1))
+                extracted_data["moq"] = val
+                claims_list.append({
+                    "field": "moq",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Capacity
+        elif re.search(r"(?:capacity|production\s*capacity|monthly\s*capacity)\s*:", lower):
+            num_m = re.search(r"(\d+)", line)
+            if num_m:
+                val = int(num_m.group(1))
+                extracted_data["capacity"] = val
+                claims_list.append({
+                    "field": "capacity",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Delivery / Lead Time
+        elif re.search(r"(?:delivery(?:\s*lead\s*time)?|lead\s*time)\s*:", lower):
+            # Check for range/ambiguity (e.g., 5 to 14 days or variable)
+            is_ambiguous = bool(re.search(r"\bto\b|\bvariable\b|\bbacklog\b|\bapprox\b|-", lower))
+            num_m = re.search(r"(\d+)", line)
+            if is_ambiguous:
+                extracted_data["ambiguous_fields"].append("delivery_days")
+                extracted_data["delivery_days"] = None
+                claims_list.append({
+                    "field": "delivery_days",
+                    "value": line.split(":", 1)[1].strip() if ":" in line else line,
+                    "source_excerpt": line,
+                    "status": "ambiguous",
+                    "notes": "Variable delivery range"
+                })
+            elif num_m:
+                val = int(num_m.group(1))
+                extracted_data["delivery_days"] = val
+                claims_list.append({
+                    "field": "delivery_days",
+                    "value": val,
+                    "source_excerpt": line,
+                    "status": "extracted"
+                })
+        # Transport / Freight
+        elif re.search(r"(?:transport(?:ation)?|freight|shipping)(?:\s*(?:cost|charge|charges))?\s*:", lower):
+            is_unspecified = any(w in lower for w in ["tbd", "to be determined", "not included", "pending"])
+            if is_unspecified:
+                extracted_data["transport_cost"] = None
+                claims_list.append({
+                    "field": "transport_cost",
+                    "value": None,
+                    "source_excerpt": line,
+                    "status": "extracted",
+                    "notes": "Freight cost pending or not included"
+                })
+            else:
+                num_m = re.search(r"(\d+(?:\.\d+)?)", line)
+                if num_m:
+                    val = float(num_m.group(1))
+                    extracted_data["transport_cost"] = val
+                    claims_list.append({
+                        "field": "transport_cost",
+                        "value": val,
+                        "source_excerpt": line,
+                        "status": "extracted"
+                    })
+        # Sustainability
+        elif re.search(r"(?:sustainability|certified|recyclable|recycled|fsc|ocean\s*bound)", lower):
+            extracted_data["sustainability_claims"].append(line)
+            claims_list.append({
+                "field": "sustainability_claims",
+                "value": line,
+                "source_excerpt": line,
+                "status": "extracted"
+            })
+            
+    extracted_data["claims"] = claims_list
+    
+    return verify_and_reconcile_quotation(
+        raw_data=extracted_data,
+        document_text=document_text,
+        source_file=source_file,
+        source_pages=source_pages,
+        metadata_extra={
+            "extraction_engine": engine_label,
+            "is_synthetic": False,
+            "fallback_triggered": True
+        }
+    )
 
 
 def detect_page_number(
