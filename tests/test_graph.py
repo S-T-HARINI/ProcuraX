@@ -1,11 +1,12 @@
 """
-Unit tests for Task 4: build_procurement_graph
+Unit tests for Task 4: build_procurement_graph and build_evidence_graph
 """
 
 import json
 import pytest
 from procurax.optimizer import optimize_allocation
-from procurax.graph import build_procurement_graph
+from procurax.scenarios import simulate_scenario
+from procurax.graph import build_procurement_graph, build_evidence_graph
 
 
 @pytest.fixture
@@ -172,3 +173,23 @@ def test_depends_on_incomplete_flag(graph_test_suppliers):
     assert len(incomplete_edges) > 0
     assert graph["decision_audit"]["depends_on_incomplete_data"] is True
     assert "SUP-002" in graph["decision_audit"]["affected_suppliers"]
+
+
+def test_build_evidence_graph_with_scenario(graph_test_suppliers):
+    alloc = optimize_allocation(graph_test_suppliers, demand=200)
+    scenario = {"type": "price_increase", "supplier_id": "SUP-002", "percentage": 20.0}
+    scen_impact = simulate_scenario(graph_test_suppliers, demand=200, scenario=scenario)
+
+    graph = build_evidence_graph(
+        suppliers=graph_test_suppliers,
+        allocation_result=alloc,
+        scenario_impact=scen_impact,
+    )
+
+    # Check scenario node and edge
+    sc_nodes = [n for n in graph["nodes"] if n["type"] == "scenario"]
+    assert len(sc_nodes) == 1
+    assert "Scenario Shock" in sc_nodes[0]["label"]
+
+    shock_edges = [e for e in graph["edges"] if e.get("relation_type") == "SIMULATES_SHOCK_ON"]
+    assert len(shock_edges) == 1

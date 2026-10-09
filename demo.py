@@ -1,159 +1,138 @@
 """
-End-to-end demonstration of ProcuraX Procurement Intelligence Engine (Person 3).
-Demonstrates landed cost, MILP allocation, scenario simulation, and graph generation.
+End-to-end reproducible demonstration of ProcuraX Procurement Intelligence Engine (Person 3).
+Demonstrates:
+1. Deterministic landed cost calculation with documented transport assumptions.
+2. MILP supplier allocation respecting demand, capacity, MOQ, and budget constraints.
+3. What-if scenario simulation with baseline-vs-scenario delta analysis.
+4. NetworkX Evidence-to-Decision Consistency Graph generation and decision audit.
+
+All demonstration data is explicitly SYNTHETIC.
 """
 
 import json
+from pathlib import Path
 from procurax import (
     calculate_landed_cost,
     optimize_allocation,
     simulate_scenario,
-    build_procurement_graph,
+    build_evidence_graph,
 )
 
-# Synthetic Demonstration Suppliers conforming to the Universal Prompt contract
-DEMO_SUPPLIERS = [
-    {
-        "supplier_id": "SUP-001",
-        "supplier_name": "EcoPak Packaging",
-        "product_name": "Reusable Bottle",
-        "unit_price": 80.0,
-        "currency": "INR",
-        "moq": 100,
-        "capacity": 600,
-        "delivery_days": 5,
-        "transport_cost": 500.0,
-        "sustainability_claims": ["100% PCR recycled material"],
-        "missing_fields": [],
-        "claims": [
-            {
-                "field": "unit_price",
-                "value": 80.0,
-                "source_file": "quotation_ecopak.pdf",
-                "source_page": 1,
-                "source_excerpt": "Quoted unit price INR 80.00 for orders exceeding 100 units.",
-                "status": "extracted",
-            },
-            {
-                "field": "capacity",
-                "value": 600,
-                "source_file": "quotation_ecopak.pdf",
-                "source_page": 2,
-                "source_excerpt": "Monthly plant allocation capacity: 600 units.",
-                "status": "extracted",
-            },
-        ],
-    },
-    {
-        "supplier_id": "SUP-002",
-        "supplier_name": "PrimeHoldings Corp",
-        "product_name": "Reusable Bottle",
-        "unit_price": 72.0,
-        "currency": "INR",
-        "moq": 150,
-        "capacity": 300,
-        "delivery_days": 7,
-        "transport_cost": 800.0,
-        "sustainability_claims": [],
-        "missing_fields": [],
-        "claims": [
-            {
-                "field": "unit_price",
-                "value": 72.0,
-                "source_file": "prime_rate_card.xlsx",
-                "source_page": 1,
-                "source_excerpt": "Rate: 72 INR per bottle; Minimum shipment 150 units.",
-                "status": "extracted",
-            }
-        ],
-    },
-    {
-        "supplier_id": "SUP-003",
-        "supplier_name": "AeroPlastic Solutions",
-        "product_name": "Reusable Bottle",
-        "unit_price": 76.0,
-        "currency": "INR",
-        "moq": 50,
-        "capacity": 400,
-        "delivery_days": None,  # Incomplete data!
-        "transport_cost": 350.0,
-        "sustainability_claims": ["ISO 14001 Certified"],
-        "missing_fields": ["delivery_days"],
-        "claims": [
-            {
-                "field": "unit_price",
-                "value": 76.0,
-                "source_file": "aeroplastic_quote.pdf",
-                "source_page": 1,
-                "source_excerpt": "Unit rate INR 76.00 ex-factory.",
-                "status": "extracted",
-            }
-        ],
-    },
-]
+# Load clearly labeled synthetic dataset
+DATASET_PATH = Path(__file__).parent / "data" / "synthetic_demo_suppliers.json"
+
+
+def load_demo_dataset():
+    with open(DATASET_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def run_demonstration():
-    print("=" * 70)
-    print("ProcuraX: Procurement Optimization & Consistency Graph Demo")
-    print("=" * 70)
+    print("=" * 75)
+    print("ProcuraX: Evidence-Driven Procurement Intelligence & Optimization Demo")
+    print("NOTE: All supplier data in this demonstration is strictly SYNTHETIC.")
+    print("=" * 75)
 
-    # 1. Landed Cost Calculation
-    print("\n[1] Landed Cost Calculation for SUP-001 (Quantity: 200 units):")
-    cost_res = calculate_landed_cost(DEMO_SUPPLIERS[0], quantity=200)
-    print(f"    Total Landed Cost: {cost_res['total_landed_cost']} {cost_res['currency']}")
-    print(f"    Effective Cost Per Unit: {cost_res['cost_per_unit']} {cost_res['currency']}")
-    print(f"    Cost Inputs Complete: {cost_res['is_complete']}")
+    suppliers = load_demo_dataset()
+    print(f"Loaded {len(suppliers)} synthetic supplier quotations from {DATASET_PATH.name}.\n")
 
-    # 2. Optimal Supplier Allocation
-    demand = 500
-    budget = 45000.0
-    print(f"\n[2] Optimizing Sourcing Allocation for Demand = {demand} units (Budget = {budget:,.2f} INR):")
-    alloc_res = optimize_allocation(DEMO_SUPPLIERS, demand=demand, budget=budget)
-    print(f"    Status: {alloc_res['status']} (Feasible: {alloc_res['is_feasible']})")
-    print(f"    Total Optimized Cost: {alloc_res['total_cost']:,.2f} {alloc_res['currency']}")
-    print(f"    Budget Utilization: {alloc_res['budget_utilized_pct']}%")
-    print("    Supplier Splits:")
-    for a in alloc_res["allocations"]:
-        print(f"      - {a['supplier_name']} ({a['supplier_id']}): {a['allocated_quantity']} units ({a['share_of_demand_pct']}%)")
-    print(f"    Explanations: {alloc_res['explanations'][0]}")
+    # 1. Landed Cost Calculation (Task 1)
+    print("-" * 75)
+    print("STEP 1: Landed-Cost Calculation (Transport Cost Assumption: Fixed Per Shipment)")
+    print("-" * 75)
+    sup_1 = suppliers[0]
+    cost_res_flat = calculate_landed_cost(sup_1, quantity=250, transport_is_per_unit=False)
+    print(f"Supplier: {cost_res_flat['supplier_name']} ({cost_res_flat['supplier_id']})")
+    print(f"  Order Quantity:          {cost_res_flat['quantity']} units")
+    print(f"  Quoted Unit Price:       {cost_res_flat['unit_price']} {cost_res_flat['currency']}")
+    print(f"  Transport Cost Mode:     {cost_res_flat['transport_cost_mode']} (Flat per order)")
+    print(f"  Transport Cost Charge:   {cost_res_flat['transport_cost']} {cost_res_flat['currency']}")
+    print(f"  Total Landed Cost:       {cost_res_flat['total_landed_cost']:,.2f} {cost_res_flat['currency']}")
+    print(f"  Effective Cost / Unit:   {cost_res_flat['cost_per_unit']} {cost_res_flat['currency']}")
+    print(f"  Data Inputs Complete:    {cost_res_flat['is_complete']}\n")
 
-    # 3. Scenario Simulation: Price Shock
-    price_scenario = {
+    # Also test incomplete supplier (SUP-004) to demonstrate zero assumption prevention
+    sup_4 = suppliers[3]
+    cost_res_inc = calculate_landed_cost(sup_4, quantity=100)
+    print(f"Incomplete Supplier Check ({sup_4['supplier_id']}):")
+    print(f"  Total Landed Cost:       {cost_res_inc['total_landed_cost']} (Never assumed 0!)")
+    print(f"  Missing Inputs Flagged:  {cost_res_inc['missing_cost_inputs']}")
+    print(f"  Inputs Complete Flag:    {cost_res_inc['is_complete']}\n")
+
+    # 2. Supplier Allocation Optimization (Task 2 & 3)
+    target_demand = 600
+    budget_limit = 52000.0
+    print("-" * 75)
+    print(f"STEP 2: MILP Supplier Allocation (Demand: {target_demand} units, Budget: {budget_limit:,.2f} INR)")
+    print("-" * 75)
+    alloc_res = optimize_allocation(suppliers, demand=target_demand, budget=budget_limit)
+    print(f"Solver Status:             {alloc_res['status']} (Feasible: {alloc_res['is_feasible']})")
+    print(f"Target Demand:             {alloc_res['requested_demand']} units")
+    print(f"Allocated Demand:          {alloc_res['allocated_demand']} units (Unmet: {alloc_res['unmet_demand']})")
+    print(f"Total Procurement Spend:   {alloc_res['total_cost']:,.2f} {alloc_res['currency']}")
+    print(f"Budget Utilization:        {alloc_res['budget_utilized_pct']}%\n")
+
+    print("Supplier Breakdown & Allocation Decisions:")
+    for b in alloc_res["supplier_breakdown"]:
+        status_tag = f"[{b['status'].upper()}]".ljust(12)
+        if b['status'] == 'allocated':
+            print(f"  {status_tag} {b['supplier_name']} ({b['supplier_id']}): "
+                  f"{b['allocated_quantity']} units | Landed: {b['landed_cost']:,.2f} INR | Notes: {b['constraint_notes']}")
+        else:
+            print(f"  {status_tag} {b['supplier_name']} ({b['supplier_id']}): "
+                  f"0 units | Reason: {b['exclusion_reason']}")
+
+    print(f"\nExplanation: {alloc_res['explanations'][0]}\n")
+
+    # 3. What-If Scenario Simulation (Task 4)
+    print("-" * 75)
+    print("STEP 3: Scenario Simulation: 25% Price Surge at Primary Supplier (SUP-002)")
+    print("-" * 75)
+    price_shock_scenario = {
         "type": "price_increase",
         "supplier_id": "SUP-002",
         "percentage": 25.0,
     }
-    print(f"\n[3] Simulating What-If Scenario: 25% price surge at SUP-002:")
-    scen_res = simulate_scenario(DEMO_SUPPLIERS, demand=demand, scenario=price_scenario, budget=budget)
-    print(f"    Impact: {scen_res['narrative_explanation']}")
-    print(f"    Total Spend Delta: {scen_res['total_cost_delta']:+,.2f} INR")
+    scen_res = simulate_scenario(suppliers, demand=target_demand, scenario=price_shock_scenario, budget=budget_limit)
+    print(f"Scenario Impact Narrative: {scen_res['narrative_explanation']}")
+    print(f"Procurement Spend Delta:   {scen_res['total_cost_delta']:+,.2f} INR ({scen_res['percentage_cost_change']:+}% change)")
+    print("Volume Reallocations:")
+    for sid, delta in scen_res["quantity_changes"].items():
+        print(f"  - {sid}: {delta:+d} units")
+    print()
 
-    # 4. Evidence-to-Decision Consistency Graph
-    print(f"\n[4] Building Evidence-to-Decision Consistency Graph:")
-    graph_res = build_procurement_graph(
-        suppliers=DEMO_SUPPLIERS,
-        allocation=alloc_res,
+    # 4. Evidence-to-Decision Consistency Graph (Task 5, 6, 7)
+    print("-" * 75)
+    print("STEP 4: Evidence-to-Decision Consistency Graph (NetworkX)")
+    print("-" * 75)
+    graph_res = build_evidence_graph(
+        suppliers=suppliers,
+        allocation_result=alloc_res,
+        scenario_impact=scen_res,
         risks=[
             {
                 "supplier_id": "SUP-002",
-                "risk_type": "Capacity Bottleneck",
+                "risk_type": "Capacity Utilization Bottleneck",
                 "severity": "medium",
-                "description": "Utilizing 100% of available plant capacity.",
+                "description": "Utilizing 100% of maximum factory batch output.",
             }
         ],
     )
-    print(f"    Graph Nodes: {graph_res['graph_metrics']['node_count']}")
-    print(f"    Graph Edges: {graph_res['graph_metrics']['edge_count']}")
-    print(f"    Node Types: {graph_res['graph_metrics']['node_types']}")
-    print(f"    Edge Types: {graph_res['graph_metrics']['edge_types']}")
-    print(f"    Recommendation Relies on Incomplete Data: {graph_res['decision_audit']['depends_on_incomplete_data']}")
-    print(f"    Affected Suppliers in Recommendation: {graph_res['decision_audit']['affected_suppliers']}")
-    print(f"    Unverified Claims Count: {graph_res['decision_audit']['unverified_claims_count']}")
+    metrics = graph_res["graph_metrics"]
+    audit = graph_res["decision_audit"]
 
-    print("\n" + "=" * 70)
-    print("All Person 3 modules executed deterministically on CPU!")
-    print("=" * 70)
+    print(f"Graph Node Count:          {metrics['node_count']}")
+    print(f"Graph Edge Count:          {metrics['edge_count']}")
+    print(f"Node Types Modeled:        {metrics['node_types']}")
+    print(f"Edge Types Modeled:        {metrics['edge_types']}")
+    print(f"Referenced Source Files:   {audit['documents_referenced']}")
+    print(f"Unverified Claims Flagged: {audit['unverified_claims_count']} (never assumed as ground-truth facts)")
+    print(f"Recommendation Caution:    relies_on_incomplete_data = {audit['depends_on_incomplete_data']}")
+    print(f"Affected Suppliers:        {audit['affected_suppliers']} (SUP-003 has unverified/missing delivery_days)")
+
+    print("\n" + "=" * 75)
+    print("ProcuraX Person 3 pipeline completed deterministically on CPU!")
+    print("=" * 75)
 
 
 if __name__ == "__main__":

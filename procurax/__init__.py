@@ -6,7 +6,7 @@ Optimization, Scenarios, and Evidence-to-Decision Consistency Graph Engine (Pers
 from procurax.cost import calculate_landed_cost
 from procurax.optimizer import optimize_allocation
 from procurax.scenarios import simulate_scenario
-from procurax.graph import build_procurement_graph
+from procurax.graph import build_procurement_graph, build_evidence_graph
 from procurax.models import (
     Supplier,
     Claim,
@@ -27,6 +27,7 @@ __all__ = [
     "optimize_allocation",
     "simulate_scenario",
     "build_procurement_graph",
+    "build_evidence_graph",
     "BaseOptimizationService",
     "BaseGraphService",
     "ProcuraXOptimizationService",

@@ -1,0 +1,138 @@
+[
+  {
+    "supplier_id": "SUP-001",
+    "supplier_name": "EcoPak Innovations (Synthetic Demo)",
+    "product_name": "Reusable Ergonomic Bottle",
+    "unit_price": 82.0,
+    "currency": "INR",
+    "moq": 100,
+    "capacity": 500,
+    "delivery_days": 6,
+    "transport_cost": 450.0,
+    "transport_cost_type": "fixed_per_shipment",
+    "sustainability_claims": [
+      "100% Post-Consumer Recycled Material",
+      "Carbon Neutral Certified Operations"
+    ],
+    "missing_fields": [],
+    "claims": [
+      {
+        "field": "unit_price",
+        "value": 82.0,
+        "source_file": "synthetic_ecopak_quote.pdf",
+        "source_page": 1,
+        "source_excerpt": "Quoted rate: INR 82.00 per unit for purchase quantities >= 100 units.",
+        "status": "extracted"
+      },
+      {
+        "field": "capacity",
+        "value": 500,
+        "source_file": "synthetic_ecopak_quote.pdf",
+        "source_page": 2,
+        "source_excerpt": "Allocated manufacturing capacity: 500 units per order cycle.",
+        "status": "extracted"
+      },
+      {
+        "field": "moq",
+        "value": 100,
+        "source_file": "synthetic_ecopak_quote.pdf",
+        "source_page": 1,
+        "source_excerpt": "Minimum Order Quantity: 100 units.",
+        "status": "extracted"
+      }
+    ],
+    "metadata": {
+      "is_synthetic": true,
+      "dataset_source": "ProcuraX Synthetic Benchmark Suite"
+    }
+  },
+  {
+    "supplier_id": "SUP-002",
+    "supplier_name": "Apex Industrial Solutions (Synthetic Demo)",
+    "product_name": "Reusable Ergonomic Bottle",
+    "unit_price": 74.0,
+    "currency": "INR",
+    "moq": 150,
+    "capacity": 350,
+    "delivery_days": 4,
+    "transport_cost": 850.0,
+    "transport_cost_type": "fixed_per_shipment",
+    "sustainability_claims": [],
+    "missing_fields": [],
+    "claims": [
+      {
+        "field": "unit_price",
+        "value": 74.0,
+        "source_file": "synthetic_apex_quote.xlsx",
+        "source_page": 1,
+        "source_excerpt": "Unit rate: INR 74.00 ex-factory; Freight flat INR 850.00.",
+        "status": "extracted"
+      },
+      {
+        "field": "capacity",
+        "value": 350,
+        "source_file": "synthetic_apex_quote.xlsx",
+        "source_page": 1,
+        "source_excerpt": "Maximum available units for batch delivery: 350.",
+        "status": "extracted"
+      }
+    ],
+    "metadata": {
+      "is_synthetic": true,
+      "dataset_source": "ProcuraX Synthetic Benchmark Suite"
+    }
+  },
+  {
+    "supplier_id": "SUP-003",
+    "supplier_name": "Vanguard Polymers (Synthetic Demo)",
+    "product_name": "Reusable Ergonomic Bottle",
+    "unit_price": 78.0,
+    "currency": "INR",
+    "moq": 50,
+    "capacity": 400,
+    "delivery_days": null,
+    "transport_cost": 300.0,
+    "transport_cost_type": "fixed_per_shipment",
+    "sustainability_claims": [
+      "ISO 14001 Environmental Standard Compliance"
+    ],
+    "missing_fields": [
+      "delivery_days"
+    ],
+    "claims": [
+      {
+        "field": "unit_price",
+        "value": 78.0,
+        "source_file": "synthetic_vanguard_catalog.pdf",
+        "source_page": 2,
+        "source_excerpt": "Item 4401 Base Price: 78.00 INR per unit.",
+        "status": "extracted"
+      }
+    ],
+    "metadata": {
+      "is_synthetic": true,
+      "dataset_source": "ProcuraX Synthetic Benchmark Suite"
+    }
+  },
+  {
+    "supplier_id": "SUP-004",
+    "supplier_name": "Unpriced Incomplete Vendor (Synthetic Demo)",
+    "product_name": "Reusable Ergonomic Bottle",
+    "unit_price": null,
+    "currency": "INR",
+    "moq": 50,
+    "capacity": 200,
+    "delivery_days": 10,
+    "transport_cost": 400.0,
+    "transport_cost_type": "fixed_per_shipment",
+    "sustainability_claims": [],
+    "missing_fields": [
+      "unit_price"
+    ],
+    "claims": [],
+    "metadata": {
+      "is_synthetic": true,
+      "dataset_source": "ProcuraX Synthetic Benchmark Suite"
+    }
+  }
+]

@@ -10,13 +10,15 @@ Uses NetworkX to construct a directed knowledge & lineage graph connecting:
 - Cost calculations
 - Supplier risks
 - Optimization allocations
+- Scenario simulations
 - Final sourcing recommendations
 
 Enforces core project constraints:
 1. Distinguishes extracted claims from independently verified facts (claims default to is_verified=False).
 2. Explicitly flags when recommendations depend on incomplete or unverified information.
 3. Preserves exact document citations (file, page, excerpt) without fabrication.
-4. Returns JSON-compatible node and edge structures for frontend visualization.
+4. Returns JSON-compatible node and edge structures for frontend visualization
+   matching both standalone consumers and Person 2's Backend API interfaces.
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -26,9 +28,10 @@ from procurax.models import Supplier
 
 def build_procurement_graph(
     suppliers: List[Union[Dict[str, Any], Any]],
-    allocation: Union[Dict[str, Any], Any],
+    allocation: Optional[Union[Dict[str, Any], Any]] = None,
     risks: Optional[List[Dict[str, Any]]] = None,
     conflicts: Optional[List[Dict[str, Any]]] = None,
+    scenario_impact: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Construct the Evidence-to-Decision Consistency Graph using NetworkX.
@@ -38,13 +41,15 @@ def build_procurement_graph(
         allocation: Output from optimize_allocation() or Person 2's OptimizationResponse.
         risks: Optional list of identified supplier or supply chain risks.
         conflicts: Optional list of detected conflicting claims/data.
+        scenario_impact: Optional scenario simulation results from simulate_scenario().
 
     Returns:
         JSON-compatible dict containing:
-        - "nodes": list of node objects with id, type, label, and attributes
-        - "edges": list of edge objects with source, target, type, and attributes
+        - "nodes": list of node objects with id, type, label, and properties
+        - "edges": list of edge objects with id, source, target, type, relation_type, and label
         - "graph_metrics": summary graph metrics
         - "decision_audit": verification and completeness audit of the recommendation
+        - "metadata": metadata object for backend integration
     """
     G = nx.DiGraph()
 
@@ -59,7 +64,9 @@ def build_procurement_graph(
             supplier_dicts.append(dict(s))
 
     # Normalize allocation to dict
-    if hasattr(allocation, "model_dump"):
+    if allocation is None:
+        alloc_dict = {}
+    elif hasattr(allocation, "model_dump"):
         alloc_dict = allocation.model_dump()
     elif isinstance(allocation, dict):
         alloc_dict = dict(allocation)
@@ -88,6 +95,7 @@ def build_procurement_graph(
             currency=s.get("currency", "INR"),
             capacity=s.get("capacity"),
             moq=s.get("moq"),
+            delivery_days=s.get("delivery_days"),
         )
 
         # Missing Fields Nodes
@@ -113,6 +121,7 @@ def build_procurement_graph(
                 source=s_node_id,
                 target=m_node_id,
                 type="HAS_MISSING_INFO",
+                relation_type="HAS_MISSING_INFO",
                 label="flags missing",
             )
             missing_info_nodes.append((sup_id, m_node_id, mf))
@@ -157,6 +166,7 @@ def build_procurement_graph(
                 source=s_node_id,
                 target=c_node_id,
                 type="CLAIMS",
+                relation_type="CLAIMS",
                 label="makes claim",
             )
 
@@ -179,6 +189,7 @@ def build_procurement_graph(
                     source=c_node_id,
                     target=doc_node_id,
                     type="EXTRACTED_FROM",
+                    relation_type="EXTRACTED_FROM",
                     label="extracted from document",
                 )
 
@@ -200,6 +211,7 @@ def build_procurement_graph(
                     source=c_node_id,
                     target=ev_node_id,
                     type="SUPPORTED_BY",
+                    relation_type="SUPPORTED_BY",
                     label="supported by excerpt",
                 )
 
@@ -215,7 +227,7 @@ def build_procurement_graph(
                 field="sustainability",
                 value=s_claim,
                 status="unverified",
-                is_verified=False,  # Do not treat sustainability claims as confirmed facts!
+                is_verified=False,  # Never treat sustainability claims as confirmed facts!
                 supplier_id=sup_id,
                 category="sustainability",
             )
@@ -226,11 +238,23 @@ def build_procurement_graph(
                 source=s_node_id,
                 target=sc_node_id,
                 type="CLAIMS",
+                relation_type="CLAIMS",
                 label="makes sustainability claim (unverified)",
             )
 
     # 2. Conflicts (Explicit and Auto-detected)
     conflict_list = list(conflicts or [])
+    # Also check suppliers conflicting_fields if present
+    for s in supplier_dicts:
+        sid = s.get("supplier_id")
+        for cf in s.get("conflicting_fields", []):
+            if not any(c.get("field") == cf for c in conflict_list):
+                conflict_list.append({
+                    "field": cf,
+                    "description": f"Conflicting information reported for field '{cf}' on {sid}",
+                    "supplier_ids": [sid],
+                })
+
     for idx, conf in enumerate(conflict_list):
         conf_node_id = f"conflict:{conf.get('field', idx)}:{idx}"
         G.add_node(
@@ -251,6 +275,7 @@ def build_procurement_graph(
                     source=s_node,
                     target=conf_node_id,
                     type="HAS_CONFLICT",
+                    relation_type="HAS_CONFLICT",
                     label="involved in conflict",
                 )
 
@@ -279,6 +304,7 @@ def build_procurement_graph(
             source=f"supplier:{sup_id}",
             target=cost_node_id,
             type="EVALUATES_COST",
+            relation_type="EVALUATES_COST",
             label="calculates landed cost",
         )
 
@@ -291,6 +317,7 @@ def build_procurement_graph(
                         source=n,
                         target=cost_node_id,
                         type="INFLUENCES_COST",
+                        relation_type="INFLUENCES_COST",
                         label="influences cost",
                     )
 
@@ -316,6 +343,7 @@ def build_procurement_graph(
                     source=s_node,
                     target=r_node_id,
                     type="EXPOSES_RISK",
+                    relation_type="EXPOSES_RISK",
                     label="risk exposure",
                 )
 
@@ -372,6 +400,7 @@ def build_procurement_graph(
                 source=cost_node_id,
                 target=alloc_node_id,
                 type="DETERMINES_ALLOCATION",
+                relation_type="DETERMINES_ALLOCATION",
                 label="cost determines volume",
             )
 
@@ -386,6 +415,7 @@ def build_procurement_graph(
                             source=r_node_id,
                             target=alloc_node_id,
                             type="AFFECTS_ALLOCATION",
+                            relation_type="AFFECTS_ALLOCATION",
                             label="risk factor",
                         )
 
@@ -395,6 +425,7 @@ def build_procurement_graph(
             source=alloc_node_id,
             target=recommendation_node_id,
             type="CONTRIBUTES_TO",
+            relation_type="CONTRIBUTES_TO",
             label="contributes to recommendation",
         )
 
@@ -410,10 +441,52 @@ def build_procurement_graph(
                         source=recommendation_node_id,
                         target=m_id,
                         type="DEPENDS_ON_INCOMPLETE_DATA",
+                        relation_type="DEPENDS_ON_INCOMPLETE_DATA",
                         label="CAUTION: relies on missing data",
                     )
 
-    # Convert NetworkX graph to JSON-compatible structures
+    # 6. Scenario Simulation Nodes (if scenario impact passed)
+    if scenario_impact:
+        sc_node_id = "scenario:simulation"
+        sc_type = scenario_impact.get("scenario_type", "disruption")
+        narrative = scenario_impact.get("narrative_explanation", "")
+        cost_delta = scenario_impact.get("total_cost_delta")
+
+        G.add_node(
+            sc_node_id,
+            id=sc_node_id,
+            type="scenario",
+            label=f"Scenario Shock: {sc_type}",
+            scenario_type=sc_type,
+            total_cost_delta=cost_delta,
+            narrative=narrative,
+        )
+
+        G.add_edge(
+            sc_node_id,
+            recommendation_node_id,
+            source=sc_node_id,
+            target=recommendation_node_id,
+            type="SIMULATES_SHOCK_ON",
+            relation_type="SIMULATES_SHOCK_ON",
+            label="shifts recommendation",
+        )
+
+        # Link to affected suppliers
+        for sid, q_change in scenario_impact.get("quantity_changes", {}).items():
+            s_node = f"supplier:{sid}"
+            if G.has_node(s_node):
+                G.add_edge(
+                    sc_node_id,
+                    s_node,
+                    source=sc_node_id,
+                    target=s_node,
+                    type="REALLOCATES_VOLUME",
+                    relation_type="REALLOCATES_VOLUME",
+                    label=f"volume shift: {q_change:+}",
+                )
+
+    # Convert NetworkX graph to JSON-compatible structures with properties dict
     nodes_data: List[Dict[str, Any]] = []
     for n, attrs in G.nodes(data=True):
         clean_attrs = {}
@@ -422,17 +495,33 @@ def build_procurement_graph(
                 clean_attrs[k] = v
             else:
                 clean_attrs[k] = str(v)
+
+        # Provide both top-level keys and properties dictionary for Person 2 compatibility
+        props = {k: v for k, v in clean_attrs.items() if k not in ("id", "label", "type")}
+        clean_attrs["properties"] = props
         nodes_data.append(clean_attrs)
 
     edges_data: List[Dict[str, Any]] = []
-    for u, v, attrs in G.edges(data=True):
-        clean_attrs = {"source": u, "target": v}
+    for idx, (u, v, attrs) in enumerate(G.edges(data=True)):
+        edge_id = attrs.get("id") or f"edge-{u}-{v}-{idx}"
+        rel_type = attrs.get("relation_type") or attrs.get("type", "CONNECTED_TO")
+        lbl = attrs.get("label", rel_type)
+
+        edge_obj = {
+            "id": edge_id,
+            "source": u,
+            "target": v,
+            "type": rel_type,
+            "relation_type": rel_type,
+            "label": lbl,
+        }
         for k, val in attrs.items():
-            if isinstance(val, (int, float, str, bool, list, dict)) or val is None:
-                clean_attrs[k] = val
-            else:
-                clean_attrs[k] = str(val)
-        edges_data.append(clean_attrs)
+            if k not in edge_obj:
+                if isinstance(val, (int, float, str, bool, list, dict)) or val is None:
+                    edge_obj[k] = val
+                else:
+                    edge_obj[k] = str(val)
+        edges_data.append(edge_obj)
 
     # Decision audit summary
     depends_on_incomplete = len(incomplete_suppliers_allocated) > 0
@@ -447,15 +536,46 @@ def build_procurement_graph(
         "total_edges": len(edges_data),
     }
 
+    graph_metrics = {
+        "node_count": G.number_of_nodes(),
+        "edge_count": G.number_of_edges(),
+        "is_dag": nx.is_directed_acyclic_graph(G),
+        "node_types": list(set(n.get("type") for n in nodes_data)),
+        "edge_types": list(set(e.get("relation_type") for e in edges_data)),
+    }
+
+    metadata = {
+        "is_mock": False,
+        "graph_metrics": graph_metrics,
+        "decision_audit": decision_audit,
+        "has_conflicts": len(conflict_list) > 0,
+        "depends_on_incomplete_data": depends_on_incomplete,
+    }
+
     return {
         "nodes": nodes_data,
         "edges": edges_data,
-        "graph_metrics": {
-            "node_count": G.number_of_nodes(),
-            "edge_count": G.number_of_edges(),
-            "is_dag": nx.is_directed_acyclic_graph(G),
-            "node_types": list(set(n.get("type") for n in nodes_data)),
-            "edge_types": list(set(e.get("type") for e in edges_data)),
-        },
+        "graph_metrics": graph_metrics,
         "decision_audit": decision_audit,
+        "metadata": metadata,
     }
+
+
+def build_evidence_graph(
+    suppliers: List[Union[Dict[str, Any], Any]],
+    allocation_result: Optional[Union[Dict[str, Any], Any]] = None,
+    scenario_impact: Optional[Dict[str, Any]] = None,
+    risks: Optional[List[Dict[str, Any]]] = None,
+    conflicts: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Direct interface alias expected by Person 2's backend GraphService.
+    Bridges GraphService.build_graph() directly to NetworkX graph builder.
+    """
+    return build_procurement_graph(
+        suppliers=suppliers,
+        allocation=allocation_result,
+        risks=risks,
+        conflicts=conflicts,
+        scenario_impact=scenario_impact,
+    )
