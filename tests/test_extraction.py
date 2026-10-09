@@ -220,6 +220,52 @@ class TestProcuraXSchemaAndValidator(unittest.TestCase):
         self.assertEqual(parsed["supplier_id"], "SUP-001")
         self.assertEqual(parsed["unit_price"], 80.0)
 
+    def test_invalid_numeric_values_sanitization(self):
+        """Verify that negative numbers, NaN, and placeholder strings are sanitized to None."""
+        raw_data = {
+            "supplier_id": "SUP-TEST",
+            "supplier_name": "Test Supplier",
+            "unit_price": -10.0,
+            "moq": "N/A",
+            "capacity": float("nan"),
+            "delivery_days": "TBD",
+            "transport_cost": "--",
+            "claims": []
+        }
+        quotation = verify_and_reconcile_quotation(
+            raw_data=raw_data,
+            document_text="Supplier Quote with invalid entries",
+            source_file="test_invalid.pdf"
+        )
+        data = quotation.to_contract_dict()
+        self.assertIsNone(data["unit_price"])
+        self.assertIsNone(data["moq"])
+        self.assertIsNone(data["capacity"])
+        self.assertIsNone(data["delivery_days"])
+        self.assertIsNone(data["transport_cost"])
+        self.assertIn("unit_price", data["missing_fields"])
+        self.assertIn("moq", data["missing_fields"])
+
+    def test_unspecified_supplier_fallback(self):
+        """Verify that missing supplier_id and supplier_name default cleanly for backend compatibility."""
+        raw_data = {
+            "supplier_id": None,
+            "supplier_name": None,
+            "unit_price": 50.0,
+            "claims": []
+        }
+        quotation = verify_and_reconcile_quotation(
+            raw_data=raw_data,
+            document_text="Anonymous supplier quote",
+            source_file="anon.pdf"
+        )
+        data = quotation.to_contract_dict()
+        self.assertEqual(data["supplier_id"], "SUP-UNSPECIFIED")
+        self.assertEqual(data["supplier_name"], "Unspecified Supplier")
+        self.assertIn("supplier_id", data["missing_fields"])
+        self.assertIn("supplier_name", data["missing_fields"])
+
+
 
 class TestMockAndHeuristicExtractionOffline(unittest.TestCase):
     """Test deterministic mock extraction and heuristic fallback (requires no model)."""

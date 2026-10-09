@@ -308,18 +308,34 @@ def detect_page_number(
 
 
 def clean_numeric(val: Any, target_type: type = float) -> Optional[Union[float, int]]:
-    """Convert mixed string/numeric values to clean numeric or None."""
+    """Convert mixed string/numeric values to clean numeric or None.
+    
+    Guarantees:
+    - Null for unknown, missing, negative, NaN, or placeholder values.
+    - Never defaults to 0 for unknown data.
+    """
     if val is None or val == "":
         return None
     if isinstance(val, (int, float)):
+        import math
+        if math.isnan(val) or math.isinf(val):
+            return None
+        if val < 0:
+            return None  # Negative prices, MOQ, delivery days, capacity are invalid
         return target_type(val)
     if isinstance(val, str):
+        cleaned_lower = val.strip().lower()
+        if cleaned_lower in ("null", "none", "n/a", "na", "unknown", "tbd", "pending", "unspecified", "nan", "-"):
+            return None
         # Remove common currency symbols, commas, and trailing words
         clean_str = re.sub(r"[^\d.-]", "", val.strip())
-        if not clean_str or clean_str in ("-", ".", "-."):
+        if not clean_str or clean_str in ("-", ".", "-.", "--"):
             return None
         try:
-            return target_type(clean_str)
+            parsed = target_type(clean_str)
+            if parsed < 0:
+                return None
+            return parsed
         except ValueError:
             return None
     return None
@@ -340,6 +356,7 @@ def verify_and_reconcile_quotation(
     - Conflicting and ambiguous claims flagged.
     - Exact source excerpts and page numbers preserved.
     - Extracted claims tagged as unverified facts.
+    - Non-empty supplier_id and supplier_name for backend model compatibility.
     """
     doc_lower = document_text.lower()
     
@@ -357,7 +374,7 @@ def verify_and_reconcile_quotation(
         curr_map = {"$": "USD", "₹": "INR", "€": "EUR", "£": "GBP", "RS": "INR", "RUPEES": "INR"}
         currency = curr_map.get(currency, currency)
     else:
-        currency = None
+        currency = "INR"
 
     # 2. Check for false zero (Rule: Use null for unknown numeric values, not zero)
     # If 0 is present, check if document explicitly mentions zero/free
@@ -460,7 +477,6 @@ def verify_and_reconcile_quotation(
     missing_fields: List[str] = []
     field_values = {
         "unit_price": unit_price,
-        "currency": currency,
         "moq": moq,
         "capacity": capacity,
         "delivery_days": delivery_days,
@@ -470,6 +486,21 @@ def verify_and_reconcile_quotation(
     for f, val in field_values.items():
         if val is None:
             missing_fields.append(f)
+
+    # Ensure non-empty supplier_id & supplier_name for backend model compatibility
+    raw_sup_id = raw_data.get("supplier_id")
+    if not raw_sup_id or str(raw_sup_id).strip().lower() in ("null", "none", "", "unknown"):
+        supplier_id = "SUP-UNSPECIFIED"
+        missing_fields.append("supplier_id")
+    else:
+        supplier_id = str(raw_sup_id).strip()
+
+    raw_sup_name = raw_data.get("supplier_name")
+    if not raw_sup_name or str(raw_sup_name).strip().lower() in ("null", "none", "", "unknown"):
+        supplier_name = "Unspecified Supplier"
+        missing_fields.append("supplier_name")
+    else:
+        supplier_name = str(raw_sup_name).strip()
 
     # Deduplicate lists
     missing_fields = sorted(list(set(missing_fields)))
@@ -491,8 +522,8 @@ def verify_and_reconcile_quotation(
     metadata.setdefault("unverified_claims_warning", "Claims reflect supplier statements and have not been independently verified.")
 
     return SupplierQuotation(
-        supplier_id=raw_data.get("supplier_id"),
-        supplier_name=raw_data.get("supplier_name"),
+        supplier_id=supplier_id,
+        supplier_name=supplier_name,
         product_name=raw_data.get("product_name"),
         unit_price=unit_price,
         currency=currency,

@@ -138,11 +138,21 @@ print(mock_result["missing_fields"])  # ['delivery_days', 'transport_cost']
 
 ---
 
+### Run Standalone Demo Script
+
+Run the end-to-end extraction demonstration using synthetic quotation data:
+
+```powershell
+.\.venv\Scripts\python.exe demo_extraction.py
+```
+
+---
+
 ## 5. Testing Instructions
 
 ### Run Fast Offline Tests (Recommended)
 
-Tests cover the schema validator, rule reconciler, mock fallbacks, and sample document extractions with mocked LLM responses. **Does not require a live Ollama daemon to run**:
+Tests cover schema validation, invalid numeric sanitization, rule reconciliation, mock fallbacks, and sample document extractions with mocked LLM responses. **Does not require a live Ollama daemon to run**:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest tests/test_extraction.py -v
@@ -159,8 +169,18 @@ $env:PROCURAX_LIVE_TESTS="1"
 
 ---
 
-## 6. Team Module Integration Notes
+## 6. Documented Limitations
 
-- **Person 1 (`feature/gemma-extraction`)**: Supplier quotation extraction, Gemma 4 E2B integration, and evidence tracking.
+1. **Pre-Parsed Text Expectation**: `extract_supplier_data` processes string text and page mappings. PDF, CSV, and XLSX file parsing is handled upstream by the backend service. Scanned raster PDFs require an external OCR step.
+2. **Local CPU Inference Latency**: Gemma 4 2B on CPU takes ~15–20 seconds per quotation. For CI pipelines and high-throughput unit tests, pass `use_mock=True` or rely on the deterministic heuristic fallback.
+3. **No Automatic Currency Normalization**: Currencies are preserved verbatim (e.g. INR, USD, EUR) to avoid arbitrary exchange rate assumptions. Cross-currency normalization must occur in the cost calculation layer with explicit rates.
+4. **Human-in-the-Loop Governance**: Every claim is tagged with `is_verified_fact: false`. Gemma 4 extracts stated claims from supplier documents; it does not independently verify physical claims or corporate certifications.
+
+---
+
+## 7. Team Module Integration Notes
+
+- **Person 1 (`feature/gemma-extraction`)**: Supplier quotation extraction, Gemma 4 E2B integration, evidence tracking, and deterministic fallbacks.
 - **Person 2 (`feature/backend-api`)**: Connects `extract_supplier_data` to FastAPI upload endpoints (`POST /api/extract`).
 - **Person 3 (`feature/optimization-graph`)**: Consumes the JSON output to build the Evidence-to-Decision Consistency Graph and run supplier allocation optimizations.
+
