@@ -1,186 +1,44 @@
-# ProcuraX: Evidence-Driven Procurement Intelligence
+# ProcuraX — Evidence-Driven Procurement Intelligence & Sourcing Optimization
 
-ProcuraX is an AI-powered procurement intelligence and sourcing optimization platform built for hackathons. It ingests supplier quotations, extracts structured supplier claims using **Gemma 4 E2B**, grounds every claim in verifiable source document excerpts, reconciles missing and conflicting information, and builds an **Evidence-to-Decision Consistency Graph**.
-
----
-
-## 1. Gemma 4 Supplier Extraction Module (`feature/gemma-extraction`)
-
-The extraction module converts unstructured or semi-structured quotation text (from PDFs, CSVs, or XLSX documents) into a validated, deterministic JSON structure matching the team's shared contract.
-
-### Core Features
-
-- **Local Inference via Ollama**: Connects to `gemma4:e2b` via Ollama's local chat endpoint using strict JSON mode.
-- **Evidence Preservation**: Preserves source file name, page numbers, and verbatim textual excerpts for each extracted claim.
-- **Distinction of Claims vs. Facts**: Every claim is explicitly tagged with `is_verified_fact: false`, preventing unverified supplier statements from being treated as established ground truth.
-- **Deterministic Null Handling**: Unknown numeric values (price, MOQ, capacity, lead time, freight) are represented as `null`, never substituted with `0`.
-- **Conflict & Ambiguity Detection**: Flags contradictory claims (e.g., standard price vs. rush price) into `conflicting_fields` and conditional statements (e.g., variable lead times or pending freight) into `ambiguous_fields`.
-- **Deterministic Mock & Heuristic Fallbacks**: Fully testable offline without requiring a running Ollama model or GPU.
+ProcuraX is an AI-powered procurement intelligence platform powered by Gemma 4. It converts supplier quotation documents into structured claims, verifies evidence, calculates estimated landed costs, optimizes supplier allocations using MILP, simulates risk scenarios, and builds interactive evidence-to-decision lineage graphs.
 
 ---
 
-## 2. Shared Supplier JSON Contract
+## 🚀 Quickstart Instructions (Windows PowerShell)
 
-```json
-{
-  "supplier_id": "SUP-001",
-  "supplier_name": "Apex Sustainable Packaging Ltd.",
-  "product_name": "Reusable Industrial Bottle (500ml)",
-  "unit_price": 80.0,
-  "currency": "INR",
-  "moq": 100,
-  "capacity": 600,
-  "delivery_days": 5,
-  "transport_cost": 500.0,
-  "discount_terms": "5% off on orders exceeding 500 units.",
-  "sustainability_claims": [
-    "Certified 100% Ocean Bound Recycled HDPE",
-    "Closed-loop manufacturing process"
-  ],
-  "missing_fields": [],
-  "ambiguous_fields": [],
-  "conflicting_fields": [],
-  "claims": [
-    {
-      "field": "unit_price",
-      "value": 80.0,
-      "source_file": "supplier_a.pdf",
-      "source_page": 1,
-      "source_excerpt": "Base Unit Price: 80.00 INR per bottle",
-      "status": "extracted",
-      "notes": null,
-      "is_verified_fact": false
-    }
-  ],
-  "metadata": {
-    "extraction_engine": "Gemma 4 (gemma4:e2b)",
-    "is_synthetic": false,
-    "fallback_triggered": false
-  }
-}
-```
-
----
-
-## 3. Setup Instructions (Windows PowerShell)
-
-### Prerequisites
-
-1. **Python 3.12+**
-2. **Ollama** installed with `gemma4:e2b` pulled:
-   ```powershell
-   ollama pull gemma4:e2b
-   ```
-
-### Virtual Environment Setup
-
+### 1. Install Backend Dependencies
 ```powershell
-# Clone repository and switch to feature branch
-git checkout feature/gemma-extraction
-
-# Create and activate virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# Install dependencies
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
----
-
-## 4. Usage Examples
-
-### Basic Extraction
-
-```python
-from procurax.extraction import extract_supplier_data
-
-quotation_text = """--- Page 1 ---
-Supplier: Apex Sustainable Packaging Ltd.
-Supplier ID: SUP-001
-Item: Reusable Industrial Bottle (500ml)
-Base Unit Price: 80.00 INR per bottle
-Minimum Order Quantity (MOQ): 100 units
-Monthly Capacity: 600 units
-Delivery Lead Time: 5 business days
-Transportation: 500.00 INR flat rate
-Sustainability: 100% Ocean Bound Recycled HDPE
-"""
-
-# Extract supplier data grounded in source document
-result = extract_supplier_data(
-    document_text=quotation_text,
-    source_file="supplier_quote.pdf",
-    source_pages=1
-)
-
-print(result["supplier_name"])   # Apex Sustainable Packaging Ltd.
-print(result["unit_price"])      # 80.0
-print(result["claims"][0])       # Evidence claim with excerpt and source_file
-```
-
-### Offline / Mock Fallback Mode
-
-For teammates (Backend API, Optimization) developing without a running Ollama model:
-
-```python
-from procurax.extraction import extract_supplier_data
-
-# Immediate deterministic synthetic data for fast local testing
-mock_result = extract_supplier_data(
-    document_text="Supplier Beta",
-    source_file="demo_beta.pdf",
-    use_mock=True
-)
-
-print(mock_result["missing_fields"])  # ['delivery_days', 'transport_cost']
-```
-
----
-
-### Run Standalone Demo Script
-
-Run the end-to-end extraction demonstration using synthetic quotation data:
-
+### 2. Run Backend API Server
 ```powershell
-.\.venv\Scripts\python.exe demo_extraction.py
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+Interactive API Documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
----
-
-## 5. Testing Instructions
-
-### Run Fast Offline Tests (Recommended)
-
-Tests cover schema validation, invalid numeric sanitization, rule reconciliation, mock fallbacks, and sample document extractions with mocked LLM responses. **Does not require a live Ollama daemon to run**:
-
+### 3. Run Frontend UI Application
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests/test_extraction.py -v
+cd frontend
+npm install
+npm run dev
 ```
+Open [http://localhost:3000](http://localhost:3000)
 
-### Run Live Model Integration Tests
-
-To test end-to-end against the local Ollama `gemma4:e2b` model:
-
+### 4. Run Test Suite
 ```powershell
-$env:PROCURAX_LIVE_TESTS="1"
-.\.venv\Scripts\python.exe -m unittest tests/test_extraction.py -v
+pytest tests/ -v
 ```
 
 ---
 
-## 6. Documented Limitations
+## 🏗️ Integrated System Architecture
 
-1. **Pre-Parsed Text Expectation**: `extract_supplier_data` processes string text and page mappings. PDF, CSV, and XLSX file parsing is handled upstream by the backend service. Scanned raster PDFs require an external OCR step.
-2. **Local CPU Inference Latency**: Gemma 4 2B on CPU takes ~15–20 seconds per quotation. For CI pipelines and high-throughput unit tests, pass `use_mock=True` or rely on the deterministic heuristic fallback.
-3. **No Automatic Currency Normalization**: Currencies are preserved verbatim (e.g. INR, USD, EUR) to avoid arbitrary exchange rate assumptions. Cross-currency normalization must occur in the cost calculation layer with explicit rates.
-4. **Human-in-the-Loop Governance**: Every claim is tagged with `is_verified_fact: false`. Gemma 4 extracts stated claims from supplier documents; it does not independently verify physical claims or corporate certifications.
-
----
-
-## 7. Team Module Integration Notes
-
-- **Person 1 (`feature/gemma-extraction`)**: Supplier quotation extraction, Gemma 4 E2B integration, evidence tracking, and deterministic fallbacks.
-- **Person 2 (`feature/backend-api`)**: Connects `extract_supplier_data` to FastAPI upload endpoints (`POST /api/extract`).
-- **Person 3 (`feature/optimization-graph`)**: Consumes the JSON output to build the Evidence-to-Decision Consistency Graph and run supplier allocation optimizations.
-
+1. **Gemma 4 Claim Extraction (`procurax.extraction`)**: Extract structured supplier quotes with grounded citations from PDF/CSV/XLSX quotes using Gemma 4 via Ollama.
+2. **Landed Cost & Optimization (`procurax.cost`, `procurax.optimizer`)**: Calculate landed costs and solve Mixed-Integer Linear Programs (MILP) under MOQ, capacity, and budget constraints.
+3. **Scenario Simulator (`procurax.scenarios`)**: Simulate price hikes, capacity reductions, and transport disruptions.
+4. **Evidence Lineage Graph (`procurax.graph`)**: NetworkX directed graph linking source documents, extracted claims, risks, and final sourcing recommendations.
+5. **FastAPI Backend (`backend/app`)**: Unified REST API exposing health check, document upload, claim extraction, optimization, graph builder, and end-to-end workflow (`/api/workflow`).
+6. **Next.js Frontend (`frontend/`)**: Professional dark-navy workspace UI with 7 hackathon pitch screens.
