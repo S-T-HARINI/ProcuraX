@@ -13,6 +13,7 @@ try:
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
+    chat = None
     ResponseError = Exception
 
 from procurax.extraction.mock_data import mock_extract_supplier_data

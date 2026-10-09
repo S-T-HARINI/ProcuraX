@@ -1,12 +1,5 @@
 """
-<<<<<<< HEAD
-ProcuraX — Evidence-Driven Procurement Intelligence and Sourcing Optimization Engine.
-"""
-
-__version__ = "0.1.0"
-=======
-ProcuraX: Evidence-Driven Procurement Intelligence and Sourcing Optimization.
-Optimization, Scenarios, and Evidence-to-Decision Consistency Graph Engine (Person 3).
+ProcuraX: Evidence-Driven Procurement Intelligence and Sourcing Optimization Engine.
 """
 
 from procurax.cost import calculate_landed_cost
@@ -22,6 +15,8 @@ from procurax.models import (
     ScenarioImpact,
 )
 
+__version__ = "0.1.0"
+
 __all__ = [
     "calculate_landed_cost",
     "optimize_allocation",
@@ -34,4 +29,3 @@ __all__ = [
     "OptimizationSummary",
     "ScenarioImpact",
 ]
->>>>>>> origin/feature/backend-api
