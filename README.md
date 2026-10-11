@@ -4,7 +4,7 @@ ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimizatio
 
 ---
 
-## 🚀 Quickstart Instructions (Windows PowerShell)
+##  Quickstart Instructions (Windows PowerShell)
 
 ### 1. Create and Activate Virtual Environment
 ```powershell
@@ -30,7 +30,7 @@ pytest tests/ -v
 
 ---
 
-## 📡 API Endpoints Summary
+##  API Endpoints Summary
 
 | Method | Endpoint | Description | Status Codes |
 |---|---|---|---|
@@ -43,7 +43,7 @@ pytest tests/ -v
 
 ---
 
-## 🔄 End-to-End Demo Workflow (`POST /api/workflow`)
+##  End-to-End Demo Workflow (`POST /api/workflow`)
 
 Send a single request to run the complete end-to-end procurement intelligence pipeline:
 
@@ -108,7 +108,7 @@ Send a single request to run the complete end-to-end procurement intelligence pi
 
 ---
 
-## 🛠️ Troubleshooting & Module Fallback Rules
+##  Troubleshooting & Module Fallback Rules
 
 1. **Ollama / Gemma 4 Unavailable**:
    - The backend detects when Ollama is offline or uninstalled and triggers a fail-safe fallback (`is_mock=True`).
@@ -122,7 +122,7 @@ Send a single request to run the complete end-to-end procurement intelligence pi
 
 ---
 
-## 🔒 Shared Supplier JSON Contract
+##  Shared Supplier JSON Contract
 
 ```json
 {
