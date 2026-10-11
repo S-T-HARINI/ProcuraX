@@ -10,7 +10,7 @@ ProcuraX is an Evidence-Driven Procurement Intelligence and Sourcing Optimizatio
 
 ---
 
-## 🚀 Quickstart Instructions (Windows PowerShell)
+##  Quickstart Instructions (Windows PowerShell)
 
 <<<<<<< HEAD
 ### 1. Install Backend Dependencies
@@ -62,7 +62,7 @@ pytest tests/ -v
 ---
 
 <<<<<<< HEAD
-## 🏗️ Integrated System Architecture
+##  Integrated System Architecture
 
 1. **Gemma 4 Claim Extraction (`procurax.extraction`)**: Extract structured supplier quotes with grounded citations from PDF/CSV/XLSX quotes using Gemma 4 via Ollama.
 2. **Landed Cost & Optimization (`procurax.cost`, `procurax.optimizer`)**: Calculate landed costs and solve Mixed-Integer Linear Programs (MILP) under MOQ, capacity, and budget constraints.
@@ -71,7 +71,7 @@ pytest tests/ -v
 5. **FastAPI Backend (`backend/app`)**: Unified REST API exposing health check, document upload, claim extraction, optimization, graph builder, and end-to-end workflow (`/api/workflow`).
 6. **Next.js Frontend (`frontend/`)**: Professional dark-navy workspace UI with 7 hackathon pitch screens.
 =======
-## 📡 API Endpoints Summary
+##  API Endpoints Summary
 
 | Method | Endpoint | Description | Status Codes |
 |---|---|---|---|
@@ -84,7 +84,7 @@ pytest tests/ -v
 
 ---
 
-## 🔄 End-to-End Demo Workflow (`POST /api/workflow`)
+##  End-to-End Demo Workflow (`POST /api/workflow`)
 
 Send a single request to run the complete end-to-end procurement intelligence pipeline:
 
@@ -149,7 +149,7 @@ Send a single request to run the complete end-to-end procurement intelligence pi
 
 ---
 
-## 🛠️ Troubleshooting & Module Fallback Rules
+##  Troubleshooting & Module Fallback Rules
 
 1. **Ollama / Gemma 4 Unavailable**:
    - The backend detects when Ollama is offline or uninstalled and triggers a fail-safe fallback (`is_mock=True`).
@@ -163,7 +163,7 @@ Send a single request to run the complete end-to-end procurement intelligence pi
 
 ---
 
-## 🔒 Shared Supplier JSON Contract
+##  Shared Supplier JSON Contract
 
 ```json
 {
